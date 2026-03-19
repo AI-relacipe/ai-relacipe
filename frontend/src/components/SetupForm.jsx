@@ -1,20 +1,26 @@
+import { useState } from 'react'
+
 const API = 'http://localhost:8000'
 
 const fields = [
-  { key: 'name',        label: '이름',    type: 'text',   default: '지수' },
-  { key: 'age',         label: '나이',    type: 'number', default: '24' },
-  { key: 'gender',      label: '성별',    type: 'text',   default: '여성' },
-  { key: 'nationality', label: '국적',    type: 'text',   default: '한국' },
-  { key: 'job',         label: '직업',    type: 'text',   default: '대학원생' },
-  { key: 'personality', label: '성격',    type: 'text',   default: '쿨하고 감정 표현이 적음' },
-  { key: 'speech_style',label: '말투',    type: 'text',   default: '짧고 직설적인 반말' },
+  { key: 'name', label: '이름', type: 'text', default: '지수' },
+  { key: 'age', label: '나이', type: 'number', default: '24' },
+  { key: 'gender', label: '성별', type: 'text', default: '여성' },
+  { key: 'nationality', label: '국적', type: 'text', default: '한국' },
+  { key: 'job', label: '직업', type: 'text', default: '대학원생' },
+  { key: 'personality', label: '성격', type: 'text', default: '밝고 활발한 성격' },
+  { key: 'speech_style', label: '말투', type: 'text', default: '반말은 하되 친구같은 연인같은 말투' },
+  { key: 'user_gender', label: '내 성별', type: 'text', default: '남성' },
 ]
 
 export default function SetupForm({ onStart, theme }) {
+  const [chatType, setChatType] = useState('online')
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     const form = Object.fromEntries(new FormData(e.target))
     form.age = Number(form.age)
+    form.chat_type = chatType
 
     const res = await fetch(`${API}/session`, {
       method: 'POST',
@@ -27,6 +33,10 @@ export default function SetupForm({ onStart, theme }) {
       return
     }
     const data = await res.json()
+    if (form.age < 20 || form.age > 60) {
+      alert("나이는 20세에서 60세 사이어야 합니다. ")
+      return
+    }
     onStart(data.session_id, form)
   }
 
@@ -59,6 +69,19 @@ export default function SetupForm({ onStart, theme }) {
             placeholder="오늘의 만남 상황을 입력하세요"
             style={{ ...s.input, resize: 'vertical' }}
           />
+        </div>
+        <div style={s.row}>
+          <label style={s.label}>대화방식</label>
+          <div style={{ display: 'flex', gap: 8, flex: 1 }}>
+            <button type="button" onClick={() => setChatType('online')}
+              style={{ ...s.btn, marginTop: 0, flex: 1, background: chatType === 'online' ? '#5865f2' : '#333' }}>
+              메신저
+            </button>
+            <button type="button" onClick={() => setChatType('offline')}
+              style={{ ...s.btn, marginTop: 0, flex: 1, background: chatType === 'offline' ? '#5865f2' : '#333' }}>
+              직접 만남
+            </button>
+          </div>
         </div>
         <button type="submit" style={s.btn}>시작</button>
       </form>

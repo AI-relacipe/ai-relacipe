@@ -11,12 +11,12 @@ const lighten = (hex, amount = 26) => {
 }
 
 const FIELDS = [
-  { key: 'name',         label: '이름' },
-  { key: 'age',          label: '나이', type: 'number' },
-  { key: 'gender',       label: '성별' },
-  { key: 'nationality',  label: '국적' },
-  { key: 'job',          label: '직업' },
-  { key: 'personality',  label: '성격' },
+  { key: 'name', label: '이름' },
+  { key: 'age', label: '나이', type: 'number' },
+  { key: 'gender', label: '성별' },
+  { key: 'nationality', label: '국적' },
+  { key: 'job', label: '직업' },
+  { key: 'personality', label: '성격' },
   { key: 'speech_style', label: '말투' },
 ]
 
@@ -36,9 +36,10 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     const text = input.trim()
     if (!text || isTyping) return
     setInput('')
-    setMessages(prev => [...prev, { role: 'user', content: text }, { role: 'assistant', content: '' }])
+    setMessages(prev => [...prev, { role: 'user', content: text }])
     setIsTyping(true)
     let aiText = ''
+    let currentLine = ''
     try {
       const res = await fetch(`${API}/chat`, {
         method: 'POST',
@@ -60,19 +61,27 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
           } else if (line.startsWith('data: ')) {
             const data = line.slice(6).trim()
             if (eventType === 'text') {
-              try { aiText += JSON.parse(data) } catch { aiText += data }
-              setMessages(prev => {
-                const updated = [...prev]
-                updated[updated.length - 1] = { role: 'assistant', content: aiText }
-                return updated
-              })
+              try { const chunk = JSON.parse(data); aiText += chunk; currentLine += chunk }
+              catch { aiText += data; currentLine += data }
+              if (currentLine.includes('\n')) {
+                const parts = currentLine.split('\n')
+                currentLine = parts.pop()
+                for (const part of parts) {
+                  if (!part.trim()) continue
+                  setMessages(prev => [...prev, { role: 'assistant', content: part, typing: false }])
+                  await new Promise(r => setTimeout(r, 200))
+                }
+              }
             } else if (eventType === 'panel_start') {
               onPanelStart()
             } else if (eventType === 'panel') {
-              try { onPanel(JSON.parse(data)) } catch {}
+              try { onPanel(JSON.parse(data)) } catch { }
             }
           }
         }
+      }
+      if (currentLine.trim()) {
+        setMessages(prev => [...prev, { role: 'assistant', content: currentLine.trim(), typing: false }])
       }
     } finally {
       setIsTyping(false)
@@ -151,16 +160,25 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
         <div style={s.messages}>
           {messages.length === 0 && <div style={s.watermark}>사용자 대화창</div>}
           <div style={s.messagesInner}>
-            {messages.map((msg, i) => (
-              <div key={i} style={{ ...s.msgRow, justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                {msg.role === 'assistant' && <div style={s.avatar}>{persona.name[0]}</div>}
-                <div style={msg.role === 'user' ? s.bubbleUser : s.bubbleAI}>
-                  {msg.content
-                    ? msg.content
-                    : (isTyping && i === messages.length - 1 ? <span style={s.typing}>···</span> : '')}
+            {messages.map((msg, i) => {
+              if (msg.role === 'assistant') {
+                const lines = msg.content ? msg.content.split('\n').filter(l => l.trim()) : ['']
+                return lines.map((line, j) => (
+                  <div key={`${i}-${j}`} style={{ ...s.msgRow, justifyContent: 'flex-start' }}>
+                    {j === 0 && <div style={s.avatar}>{persona.name[0]}</div>}
+                    {j > 0 && <div style={{ width: 32, flexShrink: 0 }} />}
+                    <div style={s.bubbleAI}>
+                      {msg.typing ? <span style={s.typing}>···</span> : msg.content}
+                    </div>
+                  </div>
+                ))
+              }
+              return (
+                <div key={i} style={{ ...s.msgRow, justifyContent: 'flex-end' }}>
+                  <div style={s.bubbleUser}>{msg.content}</div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
             <div ref={bottomRef} />
           </div>
         </div>

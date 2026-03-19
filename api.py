@@ -56,6 +56,8 @@ class SetupRequest(BaseModel):
     personality: str
     speech_style: str
     scenario: str
+    user_gender: str = "남성"
+    chat_type: str = "online"
 
 
 class ChatRequest(BaseModel):
@@ -65,8 +67,16 @@ class ChatRequest(BaseModel):
 
 @app.post("/session")
 def create_session(req: SetupRequest):
-    if not (18 <= req.age <= 60):
-        raise HTTPException(status_code=400, detail="나이는 18~60 사이여야 합니다.")
+    if not (20 <= req.age <= 60):
+        raise HTTPException(status_code=400, detail="나이는 20~60 사이여야 합니다.")
+    if len(req.name) > 10:
+        raise HTTPException(status_code=400, detail="이름은 10자 이내여야 합니다.")
+    if len(req.personality) > 20:
+        raise HTTPException(status_code=400, detail="성격은 20자 이내여야 합니다.")
+    if len(req.speech_style) > 20:
+        raise HTTPException(status_code=400, detail="말투는 20자 이내여야 합니다.")
+    if len(req.scenario) > 50:
+        raise HTTPException(status_code=400, detail="시나리오는 50자 이내여야 합니다.")
 
     persona = {
         "name": req.name,
