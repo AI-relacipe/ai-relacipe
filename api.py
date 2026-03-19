@@ -4,7 +4,8 @@ import os
 import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
-LOG_PATH = r"c:\simhwa\LLM_test\debug.log"
+# LOG_PATH = r"c:\simhwa\LLM_test\debug.log"
+LOG_PATH = "debug.log"
 
 def _log(msg):
     print(msg, flush=True)
@@ -110,7 +111,8 @@ def create_session(req: SetupRequest):
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    with open(r"c:\simhwa\LLM_test\direct.log", "a") as f:
+    # with open(r"c:\simhwa\LLM_test\direct.log", "a") as f:
+    with open("direct.log", "a") as f:
         f.write(f"CALLED: {req.message[:20]}\n")
     _log(f"[요청] /chat 호출됨 - session={req.session_id} msg={req.message[:20]}")
     session = sessions.get(req.session_id)
