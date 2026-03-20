@@ -82,6 +82,9 @@ target/
 profile_default/
 ipython_config.py
 
+# pyenv
+# .python-version
+
 # Environments
 .envrc
 .venv
@@ -90,9 +93,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
-# pyenv
-# .python-version
 
 # pdm
 .pdm-python
@@ -143,3 +143,10 @@ __marimo__/
 
 # Site
 /site
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject
