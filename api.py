@@ -6,21 +6,8 @@ import pathlib
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-# LOG_PATH = os.getenv("LOG_PATH", "/tmp/debug.log")
-DIRECT_LOG_PATH = os.getenv("DIRECT_LOG_PATH", "/tmp/direct.log")
-LOG_PATH = "debug.log"
-LOG_PATH = str(pathlib.Path(__file__).parent / "debug.log")
-DIRECT_LOG_PATH = str(pathlib.Path(__file__).parent / "direct.log")
-
-
 def _log(msg):
     print(msg, flush=True)
-    try:
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(msg + "\n")
-            f.flush()
-    except Exception as e:
-        print(f"[LOG ERR] {repr(e)}", flush=True)
 
 
 with open(LOG_PATH, "a", encoding="utf-8") as _f:
@@ -66,6 +53,8 @@ class SetupRequest(BaseModel):
     personality: str
     speech_style: str
     scenario: str
+    user_gender: str = "남성"
+    chat_type: str = "online"
 
 
 class ChatRequest(BaseModel):
@@ -75,6 +64,17 @@ class ChatRequest(BaseModel):
 
 @app.post("/session")
 def create_session(req: SetupRequest):
+    if not (20 <= req.age <= 60):
+        raise HTTPException(status_code=400, detail="나이는 20~60 사이여야 합니다.")
+    if len(req.name) > 10:
+        raise HTTPException(status_code=400, detail="이름은 10자 이내여야 합니다.")
+    if len(req.personality) > 20:
+        raise HTTPException(status_code=400, detail="성격은 20자 이내여야 합니다.")
+    if len(req.speech_style) > 20:
+        raise HTTPException(status_code=400, detail="말투는 20자 이내여야 합니다.")
+    if len(req.scenario) > 50:
+        raise HTTPException(status_code=400, detail="시나리오는 50자 이내여야 합니다.")
+
     if not (18 <= req.age <= 60):
         raise HTTPException(status_code=400, detail="나이는 18~60 사이여야 합니다.")
     persona = {
@@ -119,8 +119,6 @@ def create_session(req: SetupRequest):
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    with open(DIRECT_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(f"CALLED: {req.message[:20]}\n")
     _log(f"[요청] /chat 호출됨 - session={req.session_id} msg={req.message[:20]}")
     session = sessions.get(req.session_id)
     if not session:
