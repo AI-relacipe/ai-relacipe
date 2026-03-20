@@ -4,17 +4,8 @@ import os
 import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
-LOG_PATH = os.getenv("LOG_PATH", "/tmp/debug.log")
-DIRECT_LOG_PATH = os.getenv("DIRECT_LOG_PATH", "/tmp/direct.log")
-
 def _log(msg):
     print(msg, flush=True)
-    try:
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(msg + "\n")
-            f.flush()
-    except Exception as e:
-        print(f"[LOG ERR] {repr(e)}", flush=True)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -123,8 +114,6 @@ def create_session(req: SetupRequest):
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    with open(DIRECT_LOG_PATH, "a") as f:
-        f.write(f"CALLED: {req.message[:20]}\n")
     _log(f"[요청] /chat 호출됨 - session={req.session_id} msg={req.message[:20]}")
     session = sessions.get(req.session_id)
     if not session:

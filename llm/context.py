@@ -12,7 +12,7 @@ def build_system_prompt(persona, scenario, state):
     chat_rule = (
         "지금은 메신저/문자 대화야. 직접 만나거나 이동하는 표현 절대 쓰지 마. 짧게 나눠서 보내는 느낌으로 대화해."
         if chat_type == "online"
-        else "지금은 직접 만난 상황이야. 메신저 말투 쓰지 말고 실제 대화처럼 해."
+        else "offline일 때 줄바꿈 하지 마. 지금은 직접 만난 상황이야. 메신저 말투 쓰지 말고 실제 대화처럼 해."
     )
     return f"""
 [핵심 규칙 - 절대 어기지 말 것]

@@ -21,10 +21,10 @@ export default function PanelSection({ panels, isActive, theme }) {
       {/* 말풍선 영역 */}
       <div style={s.bubbleSection}>
         <div style={s.bubbleBox}>
-          <div style={s.bubbleTitle}>패널들의 대화창 (말풍선 형태)</div>
+          <div style={s.bubbleTitle}>패널들의 대화창</div>
           <div style={s.bubbleContent}>
             {panels.length === 0 ? (
-              <span style={s.placeholder}>새로인 등장하면 여기에 표시됩니다</span>
+              <span style={s.placeholder}>대화를 진행하면 패널이 생성됩니다.</span>
             ) : (
               panels.map((p, i) => (
                 <div key={i} style={s.panelGroup}>

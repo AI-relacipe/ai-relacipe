@@ -63,7 +63,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
             if (eventType === 'text') {
               try { const chunk = JSON.parse(data); aiText += chunk; currentLine += chunk }
               catch { aiText += data; currentLine += data }
-              if (currentLine.includes('\n')) {
+              if (persona.chat_type === 'online' && currentLine.includes('\n')) {
                 const parts = currentLine.split('\n')
                 currentLine = parts.pop()
                 for (const part of parts) {
@@ -160,13 +160,13 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
         <div style={s.messages}>
           {messages.length === 0 && <div style={s.watermark}>사용자 대화창</div>}
           <div style={s.messagesInner}>
-            {messages.map((msg, i) => {
+            {messages.map((msg, msgIndex) => {
               if (msg.role === 'assistant') {
-                const lines = msg.content ? msg.content.split('\n').filter(l => l.trim()) : ['']
-                return lines.map((line, j) => (
-                  <div key={`${i}-${j}`} style={{ ...s.msgRow, justifyContent: 'flex-start' }}>
-                    {j === 0 && <div style={s.avatar}>{persona.name[0]}</div>}
-                    {j > 0 && <div style={{ width: 32, flexShrink: 0 }} />}
+                const lines = (persona.chat_type === 'online' && msg.content) ? msg.content.split('\n').filter(line => line.trim()) : [msg.content || '']
+                return lines.map((line, lineIndex) => (
+                  <div key={`${msgIndex}-${lineIndex}`} style={{ ...s.msgRow, justifyContent: 'flex-start' }}>
+                    {lineIndex === 0 && <div style={s.avatar}>{persona.name[0]}</div>}
+                    {lineIndex > 0 && <div style={{ width: 32, flexShrink: 0 }} />}
                     <div style={s.bubbleAI}>
                       {msg.typing ? <span style={s.typing}>···</span> : msg.content}
                     </div>
@@ -174,7 +174,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
                 ))
               }
               return (
-                <div key={i} style={{ ...s.msgRow, justifyContent: 'flex-end' }}>
+                <div key={msgIndex} style={{ ...s.msgRow, justifyContent: 'flex-end' }}>
                   <div style={s.bubbleUser}>{msg.content}</div>
                 </div>
               )
