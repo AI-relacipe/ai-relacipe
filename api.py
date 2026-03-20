@@ -2,11 +2,16 @@ import json
 import uuid
 import os
 import sys
+import pathlib
+
 sys.stdout.reconfigure(encoding="utf-8")
 
 # LOG_PATH = os.getenv("LOG_PATH", "/tmp/debug.log")
 DIRECT_LOG_PATH = os.getenv("DIRECT_LOG_PATH", "/tmp/direct.log")
 LOG_PATH = "debug.log"
+LOG_PATH = str(pathlib.Path(__file__).parent / "debug.log")
+DIRECT_LOG_PATH = str(pathlib.Path(__file__).parent / "direct.log")
+
 
 def _log(msg):
     print(msg, flush=True)
@@ -16,6 +21,10 @@ def _log(msg):
             f.flush()
     except Exception as e:
         print(f"[LOG ERR] {repr(e)}", flush=True)
+
+
+with open(LOG_PATH, "a", encoding="utf-8") as _f:
+    _f.write("=== API 로드됨 ===\n")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +38,7 @@ load_dotenv()
 from llm.lover import chat_stream_gen
 from llm.detector import detect_trigger
 from db.redis_client import (
-    save_meta, append_history, get_history_count,
+    save_meta, append_history,
     delete_session as redis_delete_session,
 )
 from mc.orchestrator import should_summarize, run_summary_and_facts, build_llm_context, run_mc_panel
@@ -68,7 +77,6 @@ class ChatRequest(BaseModel):
 def create_session(req: SetupRequest):
     if not (18 <= req.age <= 60):
         raise HTTPException(status_code=400, detail="나이는 18~60 사이여야 합니다.")
-
     persona = {
         "name": req.name,
         "age": req.age,
@@ -78,7 +86,6 @@ def create_session(req: SetupRequest):
         "personality": req.personality,
         "speech_style": req.speech_style,
     }
-
     init_prompt = f"""
 아래 캐릭터와 시나리오를 보고 초기 심리 상태를 JSON으로만 출력해.
 다른 텍스트 없이 JSON만.
@@ -98,7 +105,6 @@ def create_session(req: SetupRequest):
         state = json.loads(resp.content[0].text.strip())
     except Exception:
         state = {"emotion": "설레고 기대되는 상태", "direction": "자연스럽게 대화 이어가려 함"}
-
     session_id = str(uuid.uuid4())[:8]
     sessions[session_id] = {
         "persona": persona,
@@ -108,13 +114,12 @@ def create_session(req: SetupRequest):
         "turn_count": 0,
     }
     save_meta(session_id, persona, req.scenario)
-
     return {"session_id": session_id, "initial_state": state}
 
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    with open(DIRECT_LOG_PATH, "a") as f:
+    with open(DIRECT_LOG_PATH, "a", encoding="utf-8") as f:
         f.write(f"CALLED: {req.message[:20]}\n")
     _log(f"[요청] /chat 호출됨 - session={req.session_id} msg={req.message[:20]}")
     session = sessions.get(req.session_id)
@@ -129,19 +134,23 @@ def chat(req: ChatRequest):
         history = session["history"]
         state = session["psychological_state"]
         name = session["persona"]["name"]
-
         _log(f"[유저] {req.message}")
-
-        # 스트리밍 응답
         full_response = ""
-        for event_type, value in chat_stream_gen(
-            client, req.message, history,
-            session["persona"], session["scenario"], state,
-            extra_context=llm_ctx["extra_context"],
-        ):
-            if event_type == "text":
-                full_response += value
-                yield f"event: text\ndata: {json.dumps(value, ensure_ascii=False)}\n\n"
+
+        try:
+            for event_type, value in chat_stream_gen(
+                client, req.message, history,
+                session["persona"], session["scenario"], state,
+                extra_context=llm_ctx["extra_context"],
+            ):
+                if event_type == "text":
+                    full_response += value
+                    yield f"event: text\ndata: {json.dumps(value, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            _log(f"[에러] LLM 응답 실패: {repr(e)}")
+            yield f"event: error\ndata: {json.dumps({'error': 'LLM 응답 실패'}, ensure_ascii=False)}\n\n"
+            yield f"event: done\ndata: {{}}\n\n"
+            return
 
         _log(f"[{name}] {full_response}")
         session["turn_count"] += 1
@@ -155,27 +164,33 @@ def chat(req: ChatRequest):
             run_summary_and_facts(client, req.session_id)
 
         # 감지 Agent
-        trigger = detect_trigger(client, history, session["turn_count"], state)
+        try:
+            trigger = detect_trigger(client, history, session["turn_count"], state)
+        except Exception as e:
+            _log(f"[에러] 감지 Agent 실패: {repr(e)}")
+            trigger = {"trigger": False, "reason": "에러", "context": "", "new_state": None}
 
         if trigger.get("new_state"):
             session["psychological_state"].update(trigger["new_state"])
-
         if trigger.get("trigger"):
             _log(f"[트리거] {trigger.get('reason')} → 패널 생성 중")
             yield f"event: panel_start\ndata: \n\n"
-            panel = run_mc_panel(client, req.session_id, trigger["context"])
-            _log(f"[MC→패널] {trigger['context'][:80]}...")
-            _log(f"[T형] {panel['t_panel']}")
-            _log(f"[F형] {panel['f_panel']}")
-            payload = json.dumps(
-                {"t": panel["t_panel"], "f": panel["f_panel"]},
-                ensure_ascii=False
-            )
-            yield f"event: panel\ndata: {payload}\n\n"
+            try:
+                panel = run_mc_panel(client, req.session_id, trigger["context"])
+                _log(f"[MC→패널] {trigger['context'][:80]}...")
+                _log(f"[T형] {panel['t_panel']}")
+                _log(f"[F형] {panel['f_panel']}")
+                payload = json.dumps(
+                    {"t": panel["t_panel"], "f": panel["f_panel"]},
+                    ensure_ascii=False
+                )
+                yield f"event: panel\ndata: {payload}\n\n"
+            except Exception as e:
+                _log(f"[에러] 패널 생성 실패: {repr(e)}")
+                yield f"event: error\ndata: {json.dumps({'error': '패널 생성 실패'}, ensure_ascii=False)}\n\n"
 
         yield f"event: done\ndata: {{}}\n\n"
 
-    _log(f"[요청] /chat 호출됨 - {req.message[:20]}")
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
