@@ -4,7 +4,8 @@ import os
 import sys
 sys.stdout.reconfigure(encoding="utf-8")
 
-# LOG_PATH = r"c:\simhwa\LLM_test\debug.log"
+# LOG_PATH = os.getenv("LOG_PATH", "/tmp/debug.log")
+DIRECT_LOG_PATH = os.getenv("DIRECT_LOG_PATH", "/tmp/direct.log")
 LOG_PATH = "debug.log"
 
 def _log(msg):
@@ -15,9 +16,6 @@ def _log(msg):
             f.flush()
     except Exception as e:
         print(f"[LOG ERR] {repr(e)}", flush=True)
-
-with open(LOG_PATH, "a", encoding="utf-8") as _f:
-    _f.write("=== API 로드됨 ===\n")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,7 +28,11 @@ load_dotenv()
 
 from llm.lover import chat_stream_gen
 from llm.detector import detect_trigger
-from llm.panel import run_panel
+from db.redis_client import (
+    save_meta, append_history, get_history_count,
+    delete_session as redis_delete_session,
+)
+from mc.orchestrator import should_summarize, run_summary_and_facts, build_llm_context, run_mc_panel
 
 app = FastAPI()
 
@@ -105,20 +107,23 @@ def create_session(req: SetupRequest):
         "psychological_state": state,
         "turn_count": 0,
     }
+    save_meta(session_id, persona, req.scenario)
 
     return {"session_id": session_id, "initial_state": state}
 
 
 @app.post("/chat")
 def chat(req: ChatRequest):
-    # with open(r"c:\simhwa\LLM_test\direct.log", "a") as f:
-    with open("direct.log", "a") as f:
+    with open(DIRECT_LOG_PATH, "a") as f:
         f.write(f"CALLED: {req.message[:20]}\n")
     _log(f"[요청] /chat 호출됨 - session={req.session_id} msg={req.message[:20]}")
     session = sessions.get(req.session_id)
     if not session:
         _log(f"[404] 세션 없음 - {req.session_id} / 현재 세션: {list(sessions.keys())}")
         raise HTTPException(status_code=404, detail="세션이 존재하지 않습니다.")
+
+    # MC에서 LLM 컨텍스트 조립 (요약 + fact)
+    llm_ctx = build_llm_context(req.session_id)
 
     def generate():
         history = session["history"]
@@ -131,7 +136,8 @@ def chat(req: ChatRequest):
         full_response = ""
         for event_type, value in chat_stream_gen(
             client, req.message, history,
-            session["persona"], session["scenario"], state
+            session["persona"], session["scenario"], state,
+            extra_context=llm_ctx["extra_context"],
         ):
             if event_type == "text":
                 full_response += value
@@ -139,6 +145,14 @@ def chat(req: ChatRequest):
 
         _log(f"[{name}] {full_response}")
         session["turn_count"] += 1
+
+        # Redis에 대화 저장
+        append_history(req.session_id, "user", req.message)
+        append_history(req.session_id, "assistant", full_response)
+
+        # 10메시지마다 요약 + fact 추출
+        if should_summarize(req.session_id):
+            run_summary_and_facts(client, req.session_id)
 
         # 감지 Agent
         trigger = detect_trigger(client, history, session["turn_count"], state)
@@ -149,7 +163,7 @@ def chat(req: ChatRequest):
         if trigger.get("trigger"):
             _log(f"[트리거] {trigger.get('reason')} → 패널 생성 중")
             yield f"event: panel_start\ndata: \n\n"
-            panel = run_panel(client, trigger["context"])
+            panel = run_mc_panel(client, req.session_id, trigger["context"])
             _log(f"[MC→패널] {trigger['context'][:80]}...")
             _log(f"[T형] {panel['t_panel']}")
             _log(f"[F형] {panel['f_panel']}")
@@ -168,4 +182,5 @@ def chat(req: ChatRequest):
 @app.delete("/session/{session_id}")
 def delete_session(session_id: str):
     sessions.pop(session_id, None)
+    redis_delete_session(session_id)
     return {"ok": True}

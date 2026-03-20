@@ -1,5 +1,4 @@
 import random
-from concurrent.futures import ThreadPoolExecutor
 
 def run_panel(client, trigger_context):
     mc_response = client.messages.create(
