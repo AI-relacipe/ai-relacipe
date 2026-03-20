@@ -59,6 +59,7 @@ class SetupRequest(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+    emotion: dict = None
 
 
 @app.post("/session")
@@ -82,6 +83,7 @@ def create_session(req: SetupRequest):
         "job": req.job,
         "personality": req.personality,
         "speech_style": req.speech_style,
+        "user_gender": req.user_gender,
     }
     init_prompt = f"""
 아래 캐릭터와 시나리오를 보고 초기 심리 상태를 JSON으로만 출력해.
@@ -93,7 +95,7 @@ def create_session(req: SetupRequest):
 {{"emotion": "현재 감정 상태 30자 이내", "direction": "행동 방향 30자 이내"}}
 """
     resp = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5-20251001",
         max_tokens=128,
         temperature=0.3,
         messages=[{"role": "user", "content": init_prompt}]
@@ -123,12 +125,13 @@ def create_session(req: SetupRequest):
 @app.post("/chat")
 def chat(req: ChatRequest):
     _log(f"[요청] /chat 호출됨 - session={req.session_id} msg={req.message[:20]}")
+    if req.emotion:
+        _log(f"[표정] {req.emotion.get('label', '없음')} ({req.emotion.get('score', 0)*100:.0f}%)")
     session = sessions.get(req.session_id)
     if not session:
         _log(f"[404] 세션 없음 - {req.session_id} / 현재 세션: {list(sessions.keys())}")
         raise HTTPException(status_code=404, detail="세션이 존재하지 않습니다.")
 
-    # MC에서 LLM 컨텍스트 조립 (요약 + fact)
     llm_ctx = build_llm_context(req.session_id)
 
     def generate():
@@ -144,6 +147,7 @@ def chat(req: ChatRequest):
                 session["persona"], session["scenario"], state,
                 extra_context=llm_ctx["extra_context"],
                 user_info=session["user_info"],
+                user_emotion=req.emotion,
             ):
                 if event_type == "text":
                     full_response += value
@@ -181,11 +185,9 @@ def chat(req: ChatRequest):
         append_history(req.session_id, "user", req.message)
         append_history(req.session_id, "assistant", full_response)
 
-        # 10메시지마다 요약 + fact 추출
         if should_summarize(req.session_id):
             run_summary_and_facts(client, req.session_id)
 
-        # 감지 Agent
         try:
             trigger = detect_trigger(client, history, session["turn_count"], state)
         except Exception as e:
