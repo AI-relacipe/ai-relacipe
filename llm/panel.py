@@ -103,3 +103,54 @@ F지만 너무 장황하게 말하지는말고 한줄로 반응해.
         print(f"[{name.upper()}] {response}", flush=True)
 
     return {"mc": mc, "t_panel": t_panel, "f_panel": f_panel}
+
+
+# 대화 시작 시 패널 첫 인사 - 궁금증/기대 표현
+def run_intro_panel(client, persona_context):
+    """대화 시작 시 패널 첫 인사 - 궁금증/기대 표현"""
+
+    def call_t_intro():
+        r = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=80,
+            temperature=0.8,
+            messages=[{"role": "user", "content": f"""
+너는 연애 코칭 패널 T야. 전직 UDT 출신의 쿨하고 솔직한 캐릭터야.
+지금 막 새로운 연애 상황을 배정받았어.
+아직 대화가 시작된 지 얼마 안 됐으니 판단하거나 조언하지 말고,
+상황과 페르소나를 보고 궁금하다는 느낌으로 한 줄만 말해.
+"어떻게 되려나", "지켜봐야겠는데" 같은 관망하는 말투로.
+반드시 한국어로만. 한 줄만.
+
+[상황/페르소나]
+{persona_context}
+"""}]
+        )
+        return r.content[0].text.strip()
+
+    def call_f_intro():
+        r = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=80,
+            temperature=0.8,
+            messages=[{"role": "user", "content": f"""
+너는 연애 코칭 패널 F야. 풍부한 감수성의 화려한 언니 캐릭터야.
+지금 막 새로운 연애 상황을 배정받았어.
+아직 대화가 시작된 지 얼마 안 됐으니 판단하거나 조언하지 말고,
+상황과 페르소나 보고 설레거나 기대된다는 느낌으로 한 줄만 말해.
+"어머 이 상황 너무 기대돼", "이거 뭔가 냄새나는데" 같은 말투로.
+반드시 한국어로만. 한 줄만.
+
+[상황/페르소나]
+{persona_context}
+"""}]
+        )
+        return r.content[0].text.strip()
+
+    t = call_t_intro()
+    f = call_f_intro()
+
+    print(f"[T 인트로] {t}", flush=True)
+    print(f"[F 인트로] {f}", flush=True)
+
+    return {"mc": "", "t_panel": t, "f_panel": f}

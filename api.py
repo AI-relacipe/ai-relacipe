@@ -24,6 +24,7 @@ from db.redis_client import (
     delete_session as redis_delete_session,
 )
 from mc.orchestrator import should_summarize, run_summary_and_facts, build_llm_context, run_mc_panel
+from llm.panel import run_intro_panel
 
 app = FastAPI()
 
@@ -145,6 +146,24 @@ def chat(req: ChatRequest):
 
         _log(f"[{name}] {full_response}")
         session["turn_count"] += 1
+
+        # ── 인트로 패널 (첫 번째 메시지일 때) ──
+        if session["turn_count"] == 1:
+            yield f"event: panel_start\ndata: \n\n"
+            try:
+                persona = session["persona"]
+                persona_context = f"""이름: {persona['name']}, 나이: {persona['age']}, 성별: {persona['gender']}
+성격: {persona['personality']}, 말투: {persona['speech_style']}
+시나리오: {session['scenario']}
+"""
+                intro = run_intro_panel(client, persona_context)
+                payload = json.dumps(
+                    {"t": intro["t_panel"], "f": intro["f_panel"]},
+                    ensure_ascii=False
+                )
+                yield f"event: panel\ndata: {payload}\n\n"
+            except Exception as e:
+                _log(f"[에러] 인트로 패널 실패: {repr(e)}")
 
         # Redis에 대화 저장
         append_history(req.session_id, "user", req.message)
