@@ -6,6 +6,9 @@ import pathlib
 
 sys.stdout.reconfigure(encoding="utf-8")
 
+# LOG_PATH = os.getenv("LOG_PATH", "/tmp/debug.log")
+DIRECT_LOG_PATH = os.getenv("DIRECT_LOG_PATH", "/tmp/direct.log")
+LOG_PATH = "debug.log"
 LOG_PATH = str(pathlib.Path(__file__).parent / "debug.log")
 DIRECT_LOG_PATH = str(pathlib.Path(__file__).parent / "direct.log")
 
