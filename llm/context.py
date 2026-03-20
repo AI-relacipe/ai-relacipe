@@ -1,4 +1,4 @@
-def build_system_prompt(persona, scenario, state):
+def build_system_prompt(persona, scenario, state, extra_context=""):
     """Context Injector: 매 턴 system 프롬프트를 동적으로 합성"""
     return f"""
 [핵심 규칙 - 절대 어기지 말 것]
@@ -22,4 +22,5 @@ def build_system_prompt(persona, scenario, state):
 행동 방향: {state['direction']}
 
 페르소나의 성격과 말투 특징을 최우선으로 반영해서 대화해.
+{extra_context}
 """
