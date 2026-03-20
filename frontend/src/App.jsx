@@ -3,6 +3,7 @@ import SetupForm from './components/SetupForm'
 import ChatPanel from './components/ChatPanel'
 import PanelSection from './components/PanelSection'
 import { theme as defaultTheme, THEMES } from './theme'
+import LandingPage from './components/LandingPage' 
 
 function ThemeSwitcher({ activeTheme, onChange }) {
   const [open, setOpen] = useState(false)
@@ -59,6 +60,7 @@ export default function App() {
   const [panels, setPanels] = useState([])
   const [isPanelActive, setIsPanelActive] = useState(false)
   const [activeTheme, setActiveTheme] = useState(defaultTheme)
+  const [showLanding, setShowLanding] = useState(true) 
 
   const handleStart = (sid, form) => {
     setSessionId(sid)
@@ -80,6 +82,11 @@ export default function App() {
   }
 
   const themeSwitcher = <ThemeSwitcher activeTheme={activeTheme} onChange={setActiveTheme} />
+
+
+  if (showLanding) {
+  return <LandingPage onEnter={() => setShowLanding(false)} />
+} 
 
   if (!sessionId) {
     return (
