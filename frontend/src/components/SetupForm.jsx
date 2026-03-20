@@ -22,22 +22,27 @@ export default function SetupForm({ onStart, theme }) {
     form.age = Number(form.age)
     form.chat_type = chatType
 
-    const res = await fetch(`${API}/session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    if (!res.ok) {
-      const err = await res.json()
-      alert(err.detail)
-      return
-    }
-    const data = await res.json()
     if (form.age < 20 || form.age > 60) {
-      alert("나이는 20세에서 60세 사이어야 합니다. ")
+      alert("나이는 20세에서 60세 사이어야 합니다.")
       return
     }
-    onStart(data.session_id, form)
+
+    try {
+      const res = await fetch(`${API}/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        alert(err.detail)
+        return
+      }
+      const data = await res.json()
+      onStart(data.session_id, form)
+    } catch (err) {
+      alert('서버 연결 실패! 백엔드가 켜져있는지 확인하세요.')
+    }
   }
 
   const s = makeStyles(theme)
@@ -49,36 +54,23 @@ export default function SetupForm({ onStart, theme }) {
         {fields.map(f => (
           <div key={f.key} style={s.row}>
             <label style={s.label}>{f.label}</label>
-            <input
-              name={f.key}
-              type={f.type}
-              placeholder={f.placeholder || ''}
-              defaultValue={f.default || ''}
-              required
-              style={s.input}
-            />
+            <input name={f.key} type={f.type} defaultValue={f.default || ''} required style={s.input} />
           </div>
         ))}
         <div style={s.row}>
           <label style={s.label}>시나리오</label>
-          <textarea
-            name="scenario"
-            required
-            rows={3}
-            defaultValue="카페에서 만나 대화 중인 상황"
-            placeholder="오늘의 만남 상황을 입력하세요"
-            style={{ ...s.input, resize: 'vertical' }}
-          />
+          <textarea name="scenario" required rows={3} defaultValue="카페에서 만나 대화 중인 상황"
+            placeholder="오늘의 만남 상황을 입력하세요" style={{ ...s.input, resize: 'vertical' }} />
         </div>
         <div style={s.row}>
           <label style={s.label}>대화방식</label>
           <div style={{ display: 'flex', gap: 8, flex: 1 }}>
             <button type="button" onClick={() => setChatType('online')}
-              style={{ ...s.btn, marginTop: 0, flex: 1, background: chatType === 'online' ? '#5865f2' : '#333' }}>
+              style={{ ...s.modeBtn, background: chatType === 'online' ? theme.primary : '#333' }}>
               메신저
             </button>
             <button type="button" onClick={() => setChatType('offline')}
-              style={{ ...s.btn, marginTop: 0, flex: 1, background: chatType === 'offline' ? '#5865f2' : '#333' }}>
+              style={{ ...s.modeBtn, background: chatType === 'offline' ? theme.primary : '#333' }}>
               직접 만남
             </button>
           </div>
@@ -90,23 +82,12 @@ export default function SetupForm({ onStart, theme }) {
 }
 
 const makeStyles = (t) => ({
-  wrap: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', height: '100vh', gap: 24,
-    background: t.bgBase,
-  },
+  wrap: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 24, background: t.bgBase },
   title: { fontSize: 22, fontWeight: 600, color: t.textMain },
   form: { display: 'flex', flexDirection: 'column', gap: 12, width: 400 },
   row: { display: 'flex', alignItems: 'flex-start', gap: 12 },
   label: { width: 60, paddingTop: 8, fontSize: 14, color: t.textMuted, flexShrink: 0 },
-  input: {
-    flex: 1, padding: '8px 12px', borderRadius: 8,
-    border: `1px solid ${t.border}`, background: t.bgInput,
-    color: t.textMain, fontSize: 14, outline: 'none',
-  },
-  btn: {
-    marginTop: 8, padding: '10px 0', borderRadius: 8,
-    background: t.primary, color: '#fff', fontSize: 15,
-    border: 'none', cursor: 'pointer', fontWeight: 600,
-  },
+  input: { flex: 1, padding: '8px 12px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgInput, color: t.textMain, fontSize: 14, outline: 'none' },
+  modeBtn: { flex: 1, padding: '10px 0', borderRadius: 8, color: '#fff', fontSize: 14, border: 'none', cursor: 'pointer', fontWeight: 600 },
+  btn: { marginTop: 8, padding: '10px 0', borderRadius: 8, background: t.primary, color: '#fff', fontSize: 15, border: 'none', cursor: 'pointer', fontWeight: 600 },
 })
