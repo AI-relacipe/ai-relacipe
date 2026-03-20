@@ -11,15 +11,10 @@ from db.redis_client import (
     get_history, get_history_count,
     get_facts, merge_facts,
     get_summaries, append_summary,
-    get_panel_history, append_panel_history,
+    append_panel_history,
 )
-from mc.prompts import (
-    SUMMARY_AND_FACT_PROMPT,
-    MC_BRIEF_PROMPT,
-    T_PANEL_PROMPT,
-    F_PANEL_PROMPT,
-    T_PANEL_REPLY_PROMPT,
-)
+from mc.prompts import SUMMARY_AND_FACT_PROMPT, MC_BRIEF_PROMPT
+from llm.panel import T_PANEL_PROMPT, F_PANEL_PROMPT, T_PANEL_REPLY_PROMPT
 
 SUMMARY_INTERVAL = 10  # 메시지 10개마다 요약
 
@@ -109,20 +104,12 @@ def run_mc_panel(client, session_id, trigger_context):
     """
     summaries = get_summaries(session_id)
     facts = get_facts(session_id)
-    panel_history = get_panel_history(session_id, last_n=3)
-
     summary_text = summaries[-1]["content"] if summaries else "요약 없음"
 
     non_empty = {k: v for k, v in facts.items() if v}
     facts_text = (
         "\n".join([f"- {k}: {', '.join(v)}" for k, v in non_empty.items()])
         if non_empty
-        else "없음"
-    )
-
-    panel_hist_text = (
-        "\n".join([f"[{p['speaker']}] {p['content']}" for p in panel_history])
-        if panel_history
         else "없음"
     )
 
@@ -146,7 +133,8 @@ def run_mc_panel(client, session_id, trigger_context):
             mc_brief=mc_brief,
             summary=summary_text,
             facts=facts_text,
-            panel_history=panel_hist_text,
+            trigger_context=trigger_context,
+            prev_text="",
         ),
         max_tokens=128,
         temperature=0.8,
@@ -161,7 +149,8 @@ def run_mc_panel(client, session_id, trigger_context):
             summary=summary_text,
             facts=facts_text,
             t_response=t_response,
-            panel_history=panel_hist_text,
+            trigger_context=trigger_context,
+            prev_text=f"[앞서 나온 대화]\n[T] {t_response}\n위 대화를 참고해서 자연스럽게 이어받아 반응해.",
         ),
         max_tokens=128,
         temperature=0.8,
