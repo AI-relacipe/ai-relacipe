@@ -50,6 +50,9 @@ class SetupRequest(BaseModel):
     speech_style: str
     scenario: str
     user_gender: str = "남성"
+    user_name: str = "사용자"
+    user_age: int = 25
+    user_job: str = ""
     chat_type: str = "online"
 
 
@@ -106,6 +109,12 @@ def create_session(req: SetupRequest):
         "history": [],
         "psychological_state": state,
         "turn_count": 0,
+        "user_info": {
+            "name": req.user_name,
+            "gender": req.user_gender,
+            "age": req.user_age,
+            "job": req.user_job,
+        },
     }
     save_meta(session_id, persona, req.scenario)
     return {"session_id": session_id, "initial_state": state}
@@ -134,6 +143,7 @@ def chat(req: ChatRequest):
                 client, req.message, history,
                 session["persona"], session["scenario"], state,
                 extra_context=llm_ctx["extra_context"],
+                user_info=session["user_info"],
             ):
                 if event_type == "text":
                     full_response += value
@@ -143,6 +153,8 @@ def chat(req: ChatRequest):
             yield f"event: error\ndata: {json.dumps({'error': 'LLM 응답 실패'}, ensure_ascii=False)}\n\n"
             yield f"event: done\ndata: {{}}\n\n"
             return
+
+        yield f"event: stream_done\ndata: {{}}\n\n"
 
         _log(f"[{name}] {full_response}")
         session["turn_count"] += 1
