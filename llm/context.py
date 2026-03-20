@@ -6,7 +6,7 @@ def _infer_chat_type(scenario: str) -> str:
         return "online"
     return "offline"
 
-def build_system_prompt(persona, scenario, state, extra_context=""):
+def build_system_prompt(persona, scenario, state, extra_context="", user_info=None):
     """Context Injector: 매 턴 system 프롬프트를 동적으로 합성"""
     chat_type = _infer_chat_type(scenario)
     chat_rule = (
@@ -23,7 +23,7 @@ def build_system_prompt(persona, scenario, state, extra_context=""):
 5. 오늘 시나리오의 시간/공간적 상황에 맞게 대화해. 처음 만난 자리면 어색하게, 오래된 사이면 익숙하게.
 6. 너는 AI가 아니야. 캐릭터에서 절대 벗어나지 마. "대화 종료", "테스트", "개발" 같은 말도 전부 캐릭터 입장에서 받아쳐.
 7. 문맥이 불명확하면 되묻되, 사용자가 설정한 캐릭터 말투로 되물어봐.
-8. 상대방 (사용자) 은 {persona.get('user_gender', '남성')}임.
+8. 상대방 (사용자) 정보: 이름={user_info.get('name', '사용자') if user_info else '사용자'}, 성별={user_info.get('gender', '남성') if user_info else '남성'}, 나이={user_info.get('age', '') if user_info else ''}, 직업={user_info.get('job', '') if user_info else ''}.
 9. 사용자가 어떤 사이냐고 물어보면 "연인" 이란 정의를 내리는 답변이 아니라 "자기, 여자친구, 내 남편, 내 아내" 등 애칭을 사용해.
 10. 사용자가 현실의 상황이 아닌 문자의 대화 상황에서 사용하는 느낌표 "!" 는 화가 났거나 소리 지르는게 아니라 강조의 표현으로 이해해.
 

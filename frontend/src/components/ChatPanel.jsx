@@ -34,12 +34,15 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
 
   const sendMessage = async () => {
     const text = input.trim()
+    console.log('persona.chat_type:', persona.chat_type)
     if (!text || isTyping) return
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: text }])
     setIsTyping(true)
     let aiText = ''
     let currentLine = ''
+    let pendingPanelStart = false
+    let pendingPanel = null
     try {
       const res = await fetch(`${API}/chat`, {
         method: 'POST',
@@ -69,13 +72,19 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
                 for (const part of parts) {
                   if (!part.trim()) continue
                   setMessages(prev => [...prev, { role: 'assistant', content: part, typing: false }])
-                  await new Promise(r => setTimeout(r, 200))
+                  await new Promise(r => setTimeout(r, part.length * 250))
                 }
               }
+            } else if (eventType === 'stream_done') {
+              console.log('[stream_done] currentLine:', JSON.stringify(currentLine))
+              if (currentLine.trim()) {
+                setMessages(prev => [...prev, { role: 'assistant', content: currentLine.trim(), typing: false }])
+                currentLine = ''
+              }
             } else if (eventType === 'panel_start') {
-              onPanelStart()
+              pendingPanelStart = true
             } else if (eventType === 'panel') {
-              try { onPanel(JSON.parse(data)) } catch { }
+              try { pendingPanel = JSON.parse(data) } catch { }
             }
           }
         }
@@ -83,6 +92,8 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
       if (currentLine.trim()) {
         setMessages(prev => [...prev, { role: 'assistant', content: currentLine.trim(), typing: false }])
       }
+      if (pendingPanelStart) onPanelStart()
+      if (pendingPanel) onPanel(pendingPanel)
     } finally {
       setIsTyping(false)
     }
@@ -162,16 +173,20 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
           <div style={s.messagesInner}>
             {messages.map((msg, msgIndex) => {
               if (msg.role === 'assistant') {
-                const lines = (persona.chat_type === 'online' && msg.content) ? msg.content.split('\n').filter(line => line.trim()) : [msg.content || '']
-                return lines.map((line, lineIndex) => (
-                  <div key={`${msgIndex}-${lineIndex}`} style={{ ...s.msgRow, justifyContent: 'flex-start' }}>
-                    {lineIndex === 0 && <div style={s.avatar}>{persona.name[0]}</div>}
-                    {lineIndex > 0 && <div style={{ width: 32, flexShrink: 0 }} />}
+                const prevMsg = messages[msgIndex - 1]
+                const showAvatar = !prevMsg || prevMsg.role !== 'assistant'
+                if (!msg.content && !msg.typing) return null
+                return (
+                  <div key={msgIndex} style={{ ...s.msgRow, justifyContent: 'flex-start' }}>
+                    {showAvatar
+                      ? <div style={s.avatar}>{persona.name[0]}</div>
+                      : <div style={{ width: 32, flexShrink: 0 }} />
+                    }
                     <div style={s.bubbleAI}>
                       {msg.typing ? <span style={s.typing}>···</span> : msg.content}
                     </div>
                   </div>
-                ))
+                )
               }
               return (
                 <div key={msgIndex} style={{ ...s.msgRow, justifyContent: 'flex-end' }}>
