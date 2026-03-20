@@ -2,16 +2,11 @@ import json
 import uuid
 import os
 import sys
-import pathlib
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 def _log(msg):
     print(msg, flush=True)
-
-
-with open(LOG_PATH, "a", encoding="utf-8") as _f:
-    _f.write("=== API 로드됨 ===\n")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -75,8 +70,6 @@ def create_session(req: SetupRequest):
     if len(req.scenario) > 50:
         raise HTTPException(status_code=400, detail="시나리오는 50자 이내여야 합니다.")
 
-    if not (18 <= req.age <= 60):
-        raise HTTPException(status_code=400, detail="나이는 18~60 사이여야 합니다.")
     persona = {
         "name": req.name,
         "age": req.age,

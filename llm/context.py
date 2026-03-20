@@ -6,7 +6,7 @@ def _infer_chat_type(scenario: str) -> str:
         return "online"
     return "offline"
 
-def build_system_prompt(persona, scenario, state):
+def build_system_prompt(persona, scenario, state, extra_context=""):
     """Context Injector: 매 턴 system 프롬프트를 동적으로 합성"""
     chat_type = _infer_chat_type(scenario)
     chat_rule = (
