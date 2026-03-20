@@ -96,14 +96,10 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: text }])
     setIsTyping(true)
-<<<<<<< HEAD
     let aiText = ''
     let currentLine = ''
     let pendingPanelStart = false
     let pendingPanel = null
-=======
-    let aiText = '', currentLine = ''
->>>>>>> bomin
     try {
       const body = { session_id: sessionId, message: text }
       if (emotion && cameraOn) body.emotion = emotion
@@ -124,7 +120,6 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
             if (eventType === 'text') {
               try { const chunk = JSON.parse(data); aiText += chunk; currentLine += chunk } catch { aiText += data; currentLine += data }
               if (persona.chat_type === 'online' && currentLine.includes('\n')) {
-<<<<<<< HEAD
                 const parts = currentLine.split('\n')
                 currentLine = parts.pop()
                 for (const part of parts) {
@@ -134,7 +129,6 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
                 }
               }
             } else if (eventType === 'stream_done') {
-              console.log('[stream_done] currentLine:', JSON.stringify(currentLine))
               if (currentLine.trim()) {
                 setMessages(prev => [...prev, { role: 'assistant', content: currentLine.trim(), typing: false }])
                 currentLine = ''
@@ -155,18 +149,6 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     } finally {
       setIsTyping(false)
     }
-=======
-                const parts = currentLine.split('\n'); currentLine = parts.pop()
-                for (const part of parts) { if (!part.trim()) continue; setMessages(prev => [...prev, { role: 'assistant', content: part, typing: false }]); await new Promise(r => setTimeout(r, 200)) }
-              }
-            } else if (eventType === 'panel_start') onPanelStart()
-            else if (eventType === 'panel') { try { onPanel(JSON.parse(data)) } catch {} }
-          }
-        }
-      }
-      if (currentLine.trim()) setMessages(prev => [...prev, { role: 'assistant', content: currentLine.trim(), typing: false }])
-    } finally { setIsTyping(false) }
->>>>>>> bomin
   }
 
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
@@ -208,7 +190,6 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
         <div style={s.messages}>
           {messages.length===0&&<div style={s.watermark}>사용자 대화창</div>}
           <div style={s.messagesInner}>
-<<<<<<< HEAD
             {messages.map((msg, msgIndex) => {
               if (msg.role === 'assistant') {
                 const prevMsg = messages[msgIndex - 1]
@@ -225,12 +206,6 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
                     </div>
                   </div>
                 )
-=======
-            {messages.map((msg,i) => {
-              if (msg.role==='assistant') {
-                const lines = (persona.chat_type==='online'&&msg.content)?msg.content.split('\n').filter(l=>l.trim()):[msg.content||'']
-                return lines.map((line,j)=>(<div key={i+'-'+j} style={{...s.msgRow,justifyContent:'flex-start'}}>{j===0&&<div style={s.avatar}>{persona.name[0]}</div>}{j>0&&<div style={{width:32,flexShrink:0}}/>}<div style={s.bubbleAI}>{msg.typing?<span style={s.typing}>...</span>:msg.content}</div></div>))
->>>>>>> bomin
               }
               return <div key={i} style={{...s.msgRow,justifyContent:'flex-end'}}><div style={s.bubbleUser}>{msg.content}</div></div>
             })}

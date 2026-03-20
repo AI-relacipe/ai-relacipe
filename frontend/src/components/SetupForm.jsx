@@ -23,12 +23,10 @@ const fields = [
 
 export default function SetupForm({ onStart, theme }) {
   const [chatType, setChatType] = useState('online')
-  // 초기 정보 입력 칸 효과
   const [step, setStep] = useState(1)
   const [visible, setVisible] = useState(true)
   const [myInfo, setMyInfo] = useState({})
 
-  // 나타남
   const goNext = (e) => {
     e.preventDefault()
     setMyInfo(Object.fromEntries(new FormData(e.target)))
@@ -39,7 +37,6 @@ export default function SetupForm({ onStart, theme }) {
     }, 300)
   }
 
-  // 사라짐
   const goBack = () => {
     setVisible(false)
     setTimeout(() => {
@@ -47,29 +44,13 @@ export default function SetupForm({ onStart, theme }) {
       setVisible(true)
     }, 300)
   }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-<<<<<<< HEAD
     const merged = { ...myInfo, ...Object.fromEntries(new FormData(e.target)), chat_type: chatType }
     merged.age = Number(merged.age)
     const form = merged
-    const res = await fetch(`${API}/session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    if (!res.ok) {
-      const err = await res.json()
-      alert(err.detail)
-      return
-    }
-    const data = await res.json()
-=======
-    const form = Object.fromEntries(new FormData(e.target))
-    form.age = Number(form.age)
-    form.chat_type = chatType
 
->>>>>>> bomin
     if (form.age < 20 || form.age > 60) {
       alert("나이는 20세에서 60세 사이어야 합니다.")
       return
@@ -96,7 +77,6 @@ export default function SetupForm({ onStart, theme }) {
   const s = makeStyles(theme)
 
   return (
-<<<<<<< HEAD
     <div style={{
       transition: 'opacity 0.4s ease, transform 0.4s ease',
       opacity: visible ? 1 : 0,
@@ -134,11 +114,11 @@ export default function SetupForm({ onStart, theme }) {
               <label style={s.label}>대화방식</label>
               <div style={{ display: 'flex', gap: 8, flex: 1 }}>
                 <button type="button" onClick={() => setChatType('online')}
-                  style={{ ...s.btn, marginTop: 0, flex: 1, background: chatType === 'online' ? '#5865f2' : '#333' }}>
+                  style={{ ...s.modeBtn, background: chatType === 'online' ? theme.primary : '#333' }}>
                   메신저
                 </button>
                 <button type="button" onClick={() => setChatType('offline')}
-                  style={{ ...s.btn, marginTop: 0, flex: 1, background: chatType === 'offline' ? '#5865f2' : '#333' }}>
+                  style={{ ...s.modeBtn, background: chatType === 'offline' ? theme.primary : '#333' }}>
                   직접 만남
                 </button>
               </div>
@@ -146,34 +126,6 @@ export default function SetupForm({ onStart, theme }) {
             <button type="button" onClick={goBack} style={{ ...s.btn, background: '#333' }}>이전</button>
             <button type="submit" style={s.btn}>시작</button>
           </form>
-=======
-    <div style={s.wrap}>
-      <h2 style={s.title}>캐릭터 설정</h2>
-      <form onSubmit={handleSubmit} style={s.form}>
-        {fields.map(f => (
-          <div key={f.key} style={s.row}>
-            <label style={s.label}>{f.label}</label>
-            <input name={f.key} type={f.type} defaultValue={f.default || ''} required style={s.input} />
-          </div>
-        ))}
-        <div style={s.row}>
-          <label style={s.label}>시나리오</label>
-          <textarea name="scenario" required rows={3} defaultValue="카페에서 만나 대화 중인 상황"
-            placeholder="오늘의 만남 상황을 입력하세요" style={{ ...s.input, resize: 'vertical' }} />
-        </div>
-        <div style={s.row}>
-          <label style={s.label}>대화방식</label>
-          <div style={{ display: 'flex', gap: 8, flex: 1 }}>
-            <button type="button" onClick={() => setChatType('online')}
-              style={{ ...s.modeBtn, background: chatType === 'online' ? theme.primary : '#333' }}>
-              메신저
-            </button>
-            <button type="button" onClick={() => setChatType('offline')}
-              style={{ ...s.modeBtn, background: chatType === 'offline' ? theme.primary : '#333' }}>
-              직접 만남
-            </button>
-          </div>
->>>>>>> bomin
         </div>
       )}
     </div>
