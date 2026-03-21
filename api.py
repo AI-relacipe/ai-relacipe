@@ -8,10 +8,11 @@ sys.stdout.reconfigure(encoding="utf-8")
 def _log(msg):
     print(msg, flush=True)
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import Optional
 import anthropic
 from dotenv import load_dotenv
 
@@ -20,11 +21,14 @@ load_dotenv()
 from llm.lover import chat_stream_gen
 from llm.detector import detect_trigger
 from db.redis_client import (
-    save_meta, append_history,
+    save_meta, get_meta, append_history, get_history,
     delete_session as redis_delete_session,
 )
 from mc.orchestrator import should_summarize, run_summary_and_facts, build_llm_context, run_mc_panel
 from llm.panel import run_intro_panel
+from auth import router as auth_router, verify_token
+from db.mysql_client import init_db, get_db, ChatSession, User
+from sqlalchemy.orm import Session
 
 app = FastAPI()
 
@@ -34,6 +38,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 인증 라우터 등록
+app.include_router(auth_router)
+
+# DB 테이블 생성
+@app.on_event("startup")
+def on_startup():
+    try:
+        init_db()
+        _log("[DB] MySQL 테이블 초기화 완료")
+    except Exception as e:
+        _log(f"[DB] MySQL 연결 실패 (Redis만 사용): {repr(e)}")
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
@@ -54,6 +70,7 @@ class SetupRequest(BaseModel):
     user_age: int = 25
     user_job: str = ""
     chat_type: str = "online"
+    token: Optional[str] = None  # 로그인한 경우 토큰
 
 
 class ChatRequest(BaseModel):
@@ -63,7 +80,7 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/session")
-def create_session(req: SetupRequest):
+def create_session(req: SetupRequest, db: Session = Depends(get_db)):
     if not (20 <= req.age <= 60):
         raise HTTPException(status_code=400, detail="나이는 20~60 사이여야 합니다.")
     if len(req.name) > 10:
@@ -108,6 +125,7 @@ def create_session(req: SetupRequest):
     sessions[session_id] = {
         "persona": persona,
         "scenario": req.scenario,
+        "chat_type": req.chat_type,
         "history": [],
         "psychological_state": state,
         "turn_count": 0,
@@ -119,7 +137,96 @@ def create_session(req: SetupRequest):
         },
     }
     save_meta(session_id, persona, req.scenario)
+
+    # MySQL에 세션 저장 (로그인한 경우)
+    if req.token:
+        try:
+            payload = verify_token(req.token)
+            chat_session = ChatSession(
+                user_id=payload["user_id"],
+                session_id=session_id,
+                persona_name=req.name,
+                scenario=req.scenario,
+                chat_type=req.chat_type,
+                persona_json=json.dumps(persona, ensure_ascii=False),
+            )
+            db.add(chat_session)
+            db.commit()
+        except Exception as e:
+            _log(f"[DB] 세션 MySQL 저장 실패: {repr(e)}")
+
     return {"session_id": session_id, "initial_state": state}
+
+
+@app.get("/sessions")
+def list_sessions(token: str = "", db: Session = Depends(get_db)):
+    """로그인한 사용자의 대화방 목록"""
+    if not token:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    payload = verify_token(token)
+    user_sessions = db.query(ChatSession).filter(
+        ChatSession.user_id == payload["user_id"]
+    ).order_by(ChatSession.updated_at.desc()).all()
+
+    return {
+        "sessions": [
+            {
+                "session_id": s.session_id,
+                "persona_name": s.persona_name,
+                "scenario": s.scenario,
+                "chat_type": s.chat_type,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+            }
+            for s in user_sessions
+        ]
+    }
+
+
+@app.get("/session/{session_id}/resume")
+def resume_session(session_id: str, token: str = "", db: Session = Depends(get_db)):
+    """대화 이어하기 - Redis에서 히스토리 복원"""
+    if not token:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
+    payload = verify_token(token)
+
+    # MySQL에서 세션 확인
+    chat_session = db.query(ChatSession).filter(
+        ChatSession.session_id == session_id,
+        ChatSession.user_id == payload["user_id"],
+    ).first()
+    if not chat_session:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    # Redis에서 메타 + 히스토리 로드
+    meta = get_meta(session_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="세션 데이터가 만료되었습니다.")
+
+    history = get_history(session_id, last_n=20)
+    persona = meta["persona"]
+
+    # 메모리 세션 복원
+    if session_id not in sessions:
+        sessions[session_id] = {
+            "persona": persona,
+            "scenario": chat_session.scenario,
+            "chat_type": chat_session.chat_type,
+            "history": history,
+            "psychological_state": {"emotion": "대화 재개", "direction": "이전 대화 이어가기"},
+            "turn_count": len(history) // 2,
+            "user_info": {
+                "name": "사용자",
+                "gender": persona.get("user_gender", "남성"),
+                "age": 25,
+                "job": "",
+            },
+        }
+
+    return {
+        "persona": persona,
+        "history": [{"role": m["role"], "content": m["content"]} for m in history],
+    }
 
 
 @app.post("/chat")
@@ -141,6 +248,9 @@ def chat(req: ChatRequest):
         _log(f"[유저] {req.message}")
         full_response = ""
 
+        chat_type = session.get("chat_type", None)
+        _log(f"[DEBUG] chat_type={chat_type}, scenario={session['scenario']}")
+
         try:
             for event_type, value in chat_stream_gen(
                 client, req.message, history,
@@ -148,6 +258,7 @@ def chat(req: ChatRequest):
                 extra_context=llm_ctx["extra_context"],
                 user_info=session["user_info"],
                 user_emotion=req.emotion,
+                chat_type=chat_type,
             ):
                 if event_type == "text":
                     full_response += value
@@ -219,7 +330,18 @@ def chat(req: ChatRequest):
 
 
 @app.delete("/session/{session_id}")
-def delete_session(session_id: str):
+def delete_session(session_id: str, token: str = "", db: Session = Depends(get_db)):
     sessions.pop(session_id, None)
     redis_delete_session(session_id)
+    # MySQL에서도 삭제
+    if token:
+        try:
+            payload = verify_token(token)
+            db.query(ChatSession).filter(
+                ChatSession.session_id == session_id,
+                ChatSession.user_id == payload["user_id"],
+            ).delete()
+            db.commit()
+        except Exception:
+            pass
     return {"ok": True}

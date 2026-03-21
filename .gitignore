@@ -152,3 +152,5 @@ __marimo__/
 .ropeproject
 
 AI_relacipe_key.pem
+frontend/.env.DS_Store
+.idea/

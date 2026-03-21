@@ -6,17 +6,31 @@ services:
     volumes:
       - redis_data:/data
 
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_DATABASE: relacipe
+      MYSQL_CHARSET: utf8mb4
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
   backend:
     build: .
     ports:
       - "8000:8000"
     depends_on:
       - redis
+      - mysql
     env_file:
       - .env
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - DATABASE_URL=mysql+pymysql://root:root1234@mysql:3306/relacipe
 
   frontend:
     build: ./frontend
@@ -27,3 +41,4 @@ services:
 
 volumes:
   redis_data:
+  mysql_data:
