@@ -207,7 +207,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
                   </div>
                 )
               }
-              return <div key={i} style={{...s.msgRow,justifyContent:'flex-end'}}><div style={s.bubbleUser}>{msg.content}</div></div>
+              return <div key={msgIndex} style={{...s.msgRow,justifyContent:'flex-end'}}><div style={s.bubbleUser}>{msg.content}</div></div>
             })}
             <div ref={bottomRef}/>
           </div>

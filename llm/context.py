@@ -9,7 +9,7 @@ def _infer_chat_type(scenario: str) -> str:
 
 def build_system_prompt(persona, scenario, state, extra_context="", user_info=None, user_emotion=None):
     """Context Injector: 매 턴 system 프롬프트를 동적으로 합성"""
-    chat_type = _infer_chat_type(scenario)
+    chat_type = persona.get("chat_type") or _infer_chat_type(scenario)
     chat_rule = (
         "지금은 메신저/문자 대화야. 직접 만나거나 이동하는 표현 절대 쓰지 마. 짧게 나눠서 보내는 느낌으로 대화해."
         if chat_type == "online"
