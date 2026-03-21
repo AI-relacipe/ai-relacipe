@@ -21,7 +21,7 @@ SUMMARY_INTERVAL = 10  # 메시지 10개마다 요약
 
 def _llm(client, prompt, max_tokens=512, temperature=0.3):
     resp = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5-20251001",
         max_tokens=max_tokens,
         temperature=temperature,
         messages=[{"role": "user", "content": prompt}],
@@ -104,6 +104,7 @@ def run_mc_panel(client, session_id, trigger_context):
     """
     summaries = get_summaries(session_id)
     facts = get_facts(session_id)
+    recent_history = get_history(session_id, last_n=10)
     summary_text = summaries[-1]["content"] if summaries else "요약 없음"
 
     non_empty = {k: v for k, v in facts.items() if v}
@@ -113,15 +114,23 @@ def run_mc_panel(client, session_id, trigger_context):
         else "없음"
     )
 
+    # 최근 대화 텍스트 (패널이 전체 흐름을 파악하도록)
+    recent_chat = "\n".join(
+        [f"{'사용자' if m['role'] == 'user' else '연인'}: {m['content']}" for m in recent_history]
+    ) if recent_history else "대화 없음"
+
+    # trigger_context에 최근 대화 포함
+    full_context = f"[최근 대화 흐름]\n{recent_chat}\n\n[트리거 상황]\n{trigger_context}"
+
     # 1. MC 브리핑
     mc_brief = _llm(
         client,
         MC_BRIEF_PROMPT.format(
             summary=summary_text,
             facts=facts_text,
-            recent_context=trigger_context,
+            recent_context=full_context,
         ),
-        max_tokens=128,
+        max_tokens=256,
         temperature=0.7,
     )
     append_panel_history(session_id, "MC", mc_brief)
@@ -133,10 +142,10 @@ def run_mc_panel(client, session_id, trigger_context):
             mc_brief=mc_brief,
             summary=summary_text,
             facts=facts_text,
-            trigger_context=trigger_context,
+            trigger_context=full_context,
             prev_text="",
         ),
-        max_tokens=128,
+        max_tokens=256,
         temperature=0.8,
     )
     append_panel_history(session_id, "T", t_response)
@@ -149,10 +158,10 @@ def run_mc_panel(client, session_id, trigger_context):
             summary=summary_text,
             facts=facts_text,
             t_response=t_response,
-            trigger_context=trigger_context,
+            trigger_context=full_context,
             prev_text=f"[앞서 나온 대화]\n[T] {t_response}\n위 대화를 참고해서 자연스럽게 이어받아 반응해.",
         ),
-        max_tokens=128,
+        max_tokens=256,
         temperature=0.8,
     )
     append_panel_history(session_id, "F", f_response)
@@ -161,7 +170,7 @@ def run_mc_panel(client, session_id, trigger_context):
     t_reply = _llm(
         client,
         T_PANEL_REPLY_PROMPT.format(mc_brief=mc_brief, f_response=f_response),
-        max_tokens=128,
+        max_tokens=256,
         temperature=0.8,
     )
     append_panel_history(session_id, "T", t_reply)

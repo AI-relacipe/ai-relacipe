@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import * as faceapi from 'face-api.js'
 
-const API = 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const lighten = (hex, amount = 26) => {
   const n = parseInt(hex.replace('#', ''), 16)
@@ -32,7 +32,6 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
   const [cameraOn, setCameraOn] = useState(false)
   const [emotion, setEmotion] = useState(null)
   const [modelsLoaded, setModelsLoaded] = useState(false)
-  const [meetMode, setMeetMode] = useState(persona.chat_type === 'offline')
   const bottomRef = useRef(null)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -51,18 +50,11 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     load()
   }, [])
 
-  useEffect(() => {
-    if (persona.chat_type === 'offline' && modelsLoaded && !cameraOn) {
-      startCamera()
-    }
-  }, [modelsLoaded])
-
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } })
       streamRef.current = stream
       setCameraOn(true)
-      setMeetMode(true)
       setTimeout(() => {
         if (videoRef.current) videoRef.current.srcObject = stream
         detectIntervalRef.current = setInterval(async () => {
@@ -82,7 +74,6 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     if (detectIntervalRef.current) { clearInterval(detectIntervalRef.current); detectIntervalRef.current = null }
     setCameraOn(false)
     setEmotion(null)
-    setMeetMode(false)
   }
 
   const toggleCamera = useCallback(() => { cameraOn ? stopCamera() : startCamera() }, [cameraOn])
@@ -91,9 +82,9 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
 
   const sendMessage = async () => {
     const text = input.trim()
-    console.log('persona.chat_type:', persona.chat_type)
     if (!text || isTyping) return
     setInput('')
+    setTimeout(() => setInput(''), 0)
     setMessages(prev => [...prev, { role: 'user', content: text }])
     setIsTyping(true)
     let aiText = ''
@@ -133,6 +124,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
                 setMessages(prev => [...prev, { role: 'assistant', content: currentLine.trim(), typing: false }])
                 currentLine = ''
               }
+              setIsTyping(false)
             } else if (eventType === 'panel_start') {
               pendingPanelStart = true
             } else if (eventType === 'panel') {
@@ -141,8 +133,14 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
           }
         }
       }
-      if (currentLine.trim()) {
-        setMessages(prev => [...prev, { role: 'assistant', content: currentLine.trim(), typing: false }])
+      if (aiText.trim()) {
+        setMessages(prev => {
+          const alreadyAdded = prev.some(m => m.role === 'assistant' && m.content && aiText.includes(m.content))
+          if (!alreadyAdded) {
+            return [...prev, { role: 'assistant', content: aiText.trim(), typing: false }]
+          }
+          return prev
+        })
       }
       if (pendingPanelStart) onPanelStart()
       if (pendingPanel) onPanel(pendingPanel)
@@ -182,8 +180,8 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div><span style={s.scenarioLabel}>사용자 상황 설정</span><span style={s.scenarioValue}>입력한 상황: {persona.scenario}</span></div>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
-              {meetMode && emotion && <span style={s.emotionBadge}>{EMOTION_KR[emotion.label]||emotion.label} {Math.round(emotion.score*100)}%</span>}
-              <span style={{fontSize:11,color:meetMode?'#4ade80':theme.textMuted,fontWeight:600}}>{meetMode?'직접 만남 모드':'메신저 모드'}</span>
+              {emotion && cameraOn && <span style={s.emotionBadge}>{EMOTION_KR[emotion.label]||emotion.label} {Math.round(emotion.score*100)}%</span>}
+              {cameraOn && <span style={{fontSize:11,color:'#4ade80',fontWeight:600}}>감정 감지 중</span>}
             </div>
           </div>
         </div>
@@ -215,8 +213,10 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
         <div style={s.bottomArea}>
           {cameraOn&&<div style={s.cameraPreview}><video ref={videoRef} autoPlay muted playsInline style={s.video}/>{emotion&&<div style={s.emotionOverlay}>{EMOTION_KR[emotion.label]||emotion.label}</div>}</div>}
           <div style={s.inputBar}><div style={s.inputInner}>
-            <button onClick={toggleCamera} disabled={!modelsLoaded} style={{...s.cameraBtn,background:cameraOn?'#ef4444':theme.bgPanel,color:cameraOn?'#fff':theme.textMain}} title={cameraOn?'카메라 끄기':'카메라 켜기'}>{cameraOn?'끄기':'만나서 대화'}</button>
-            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={meetMode?'만나서 대화 중...':'메시지 입력...'} style={s.input}/>
+            <button onClick={toggleCamera} disabled={!modelsLoaded} style={{...s.cameraBtn,background:cameraOn?'#ef4444':theme.bgPanel,color:cameraOn?'#fff':theme.textMain}} title={cameraOn?'카메라 끄기':'표정으로 감정 전달'}>
+              {cameraOn ? '📷 끄기' : '📷'}
+            </button>
+            <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="메시지 입력..." style={s.input}/>
             <button onClick={sendMessage} disabled={isTyping} style={s.sendBtn}>전송</button>
           </div></div>
         </div>
