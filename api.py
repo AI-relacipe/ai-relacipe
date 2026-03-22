@@ -2,6 +2,7 @@ import json
 import uuid
 import os
 import sys
+import threading
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -22,7 +23,7 @@ from llm.lover import chat_stream_gen
 from llm.detector import detect_trigger
 from db.redis_client import (
     save_meta, get_meta, append_history, get_history,
-    delete_session as redis_delete_session,
+    save_state, delete_session as redis_delete_session,
 )
 from mc.orchestrator import should_summarize, run_summary_and_facts, build_llm_context, run_mc_panel
 from llm.panel import run_intro_panel
@@ -54,6 +55,7 @@ def on_startup():
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 sessions = {}
+sessions_lock = threading.Lock()
 
 
 class SetupRequest(BaseModel):
@@ -122,20 +124,21 @@ def create_session(req: SetupRequest, db: Session = Depends(get_db)):
     except Exception:
         state = {"emotion": "설레고 기대되는 상태", "direction": "자연스럽게 대화 이어가려 함"}
     session_id = str(uuid.uuid4())[:8]
-    sessions[session_id] = {
-        "persona": persona,
-        "scenario": req.scenario,
-        "chat_type": req.chat_type,
-        "history": [],
-        "psychological_state": state,
-        "turn_count": 0,
-        "user_info": {
-            "name": req.user_name,
-            "gender": req.user_gender,
-            "age": req.user_age,
-            "job": req.user_job,
-        },
-    }
+    with sessions_lock:
+        sessions[session_id] = {
+            "persona": persona,
+            "scenario": req.scenario,
+            "chat_type": req.chat_type,
+            "history": [],
+            "psychological_state": state,
+            "turn_count": 0,
+            "user_info": {
+                "name": req.user_name,
+                "gender": req.user_gender,
+                "age": req.user_age,
+                "job": req.user_job,
+            },
+        }
     save_meta(session_id, persona, req.scenario)
 
     # MySQL에 세션 저장 (로그인한 경우)
@@ -234,7 +237,8 @@ def chat(req: ChatRequest):
     _log(f"[요청] /chat 호출됨 - session={req.session_id} msg={req.message[:20]}")
     if req.emotion:
         _log(f"[표정] {req.emotion.get('label', '없음')} ({req.emotion.get('score', 0)*100:.0f}%)")
-    session = sessions.get(req.session_id)
+    with sessions_lock:
+        session = sessions.get(req.session_id)
     if not session:
         _log(f"[404] 세션 없음 - {req.session_id} / 현재 세션: {list(sessions.keys())}")
         raise HTTPException(status_code=404, detail="세션이 존재하지 않습니다.")
@@ -307,6 +311,7 @@ def chat(req: ChatRequest):
 
         if trigger.get("new_state"):
             session["psychological_state"].update(trigger["new_state"])
+            save_state(req.session_id, session["psychological_state"])
         if trigger.get("trigger"):
             _log(f"[트리거] {trigger.get('reason')} → 패널 생성 중")
             yield f"event: panel_start\ndata: \n\n"

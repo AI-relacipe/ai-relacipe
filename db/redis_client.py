@@ -107,6 +107,20 @@ def get_panel_history(session_id, last_n=3):
     return items[-last_n:] if last_n else items
 
 
+# ── 심리 상태 ─────────────────────────────────────────────────────────
+
+def save_state(session_id, state):
+    get_redis().set(
+        f"session:{session_id}:state",
+        json.dumps(state, ensure_ascii=False),
+    )
+
+
+def get_state(session_id):
+    raw = get_redis().get(f"session:{session_id}:state")
+    return json.loads(raw) if raw else None
+
+
 # ── 세션 삭제 ─────────────────────────────────────────────────────────
 
 def delete_session(session_id):

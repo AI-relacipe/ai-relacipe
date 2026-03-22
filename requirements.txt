@@ -6,5 +6,6 @@ pydantic>=2.7.0
 redis
 sqlalchemy
 pymysql
+cryptography
 bcrypt
 pyjwt
