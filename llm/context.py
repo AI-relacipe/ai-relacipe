@@ -7,7 +7,7 @@ def _infer_chat_type(scenario: str) -> str:
     return "offline"
 
 
-def build_system_prompt(persona, scenario, state, extra_context="", user_info=None, user_emotion=None, chat_type=None):
+def build_system_prompt(persona, scenario, state, extra_context="", user_info=None, user_camera_emotion=None, user_voice_emotion=None, chat_type=None):
     """Context Injector: 매 턴 system 프롬프트를 동적으로 합성"""
     # chat_type이 명시적으로 전달되면 그걸 사용, 아니면 시나리오에서 추론
     if chat_type is None:
@@ -64,33 +64,44 @@ assistant: 진짜? 뭐 먹고 싶은 거 있어?
 user: 나 좀 봐봐
 assistant: 왜왜 뭔데, 뭐가 달라졌어?"""
 
-    emotion_text = ""
-    if user_emotion and user_emotion.get("label"):
-        label = user_emotion["label"]
-        score = user_emotion.get("score", 0)
-        emotion_map = {
-            "happy": "환하게 웃고 있음 - 기분이 좋아보임",
-            "sad": "표정이 어두움 - 슬프거나 우울해보임",
-            "angry": "눈썹을 찌푸리고 있음 - 화가 나거나 짜증난 표정",
-            "surprised": "눈이 커지고 입이 벌어짐 - 놀라거나 당황한 표정",
-            "disgusted": "인상을 쓰고 있음 - 불쾌하거나 싫은 표정",
-            "fearful": "긴장된 표정 - 불안하거나 걱정되는 얼굴",
-            "neutral": "담담한 표정 - 특별한 감정 없이 차분함",
-        }
-        korean_emotion = emotion_map.get(label, label)
-        intensity = "아주 강하게" if score > 0.8 else "꽤" if score > 0.5 else "살짝"
-        emotion_text = f"""
-[상대방의 현재 표정 - 실시간 감지]
-표정: {korean_emotion}
-강도: {intensity} 느껴짐 ({score*100:.0f}%)
+    face_emotion_map = {
+        "happy": "환하게 웃고 있음 - 기분이 좋아보임",
+        "sad": "표정이 어두움 - 슬프거나 우울해보임",
+        "angry": "눈썹을 찌푸리고 있음 - 화가 나거나 짜증난 표정",
+        "surprised": "눈이 커지고 입이 벌어짐 - 놀라거나 당황한 표정",
+        "disgusted": "인상을 쓰고 있음 - 불쾌하거나 싫은 표정",
+        "fearful": "긴장된 표정 - 불안하거나 걱정되는 얼굴",
+        "neutral": "담담한 표정 - 특별한 감정 없이 차분함",
+    }
+    voice_emotion_map = {
+        "ang": "목소리가 날카롭거나 거셈 - 화가 나있는 상태",
+        "hap": "목소리가 밝고 활기참 - 기분이 좋은 상태",
+        "neu": "목소리가 차분함 - 평온한 상태",
+        "sad": "목소리가 가라앉아 있음 - 슬프거나 우울한 상태",
+        "dis": "목소리에 불쾌감이 느껴짐",
+        "fea": "목소리가 떨리거나 조심스러움 - 불안한 상태",
+        "sur": "목소리에 놀람이 느껴짐",
+    }
 
-이 표정을 자연스럽게 반영해서 대화해.
-- 웃고 있으면: 같이 밝은 톤, 장난도 가능
-- 슬퍼보이면: 걱정하는 톤, 다정하게
-- 화나보이면: 달래주거나 원인 물어보기
-- 놀란 표정: 궁금해하기
-- 무표정: 관심 끌어보기
-표정을 직접 언급하지 마. 분위기만 맞춰."""
+    emotion_text = ""
+    lines = []
+    if user_camera_emotion and user_camera_emotion.get("label"):
+        label = user_camera_emotion["label"]
+        score = user_camera_emotion.get("score", 0)
+        intensity = "아주 강하게" if score > 0.8 else "꽤" if score > 0.5 else "살짝"
+        lines.append(f"표정(카메라): {face_emotion_map.get(label, label)} - {intensity} 느껴짐 ({score*100:.0f}%)")
+    if user_voice_emotion and user_voice_emotion.get("label"):
+        label = user_voice_emotion["label"]
+        score = user_voice_emotion.get("score", 0)
+        intensity = "아주 강하게" if score > 0.8 else "꽤" if score > 0.5 else "살짝"
+        lines.append(f"목소리(음성): {voice_emotion_map.get(label, label)} - {intensity} 느껴짐 ({score*100:.0f}%)")
+
+    if lines:
+        emotion_text = f"""
+[상대방의 현재 감정 - 실시간 감지]
+{chr(10).join(lines)}
+
+이 감정을 자연스럽게 반영해서 대화해. 감정을 직접 언급하지 마. 분위기만 맞춰."""
 
     return f"""
 [핵심 규칙 - 절대 어기지 말 것]
