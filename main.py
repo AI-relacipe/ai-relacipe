@@ -6,7 +6,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 load_dotenv()
 
-from llm.lover import chat_stream
+from llm.lover import chat_stream_gen
 from llm.detector import detect_trigger
 from llm.panel import run_panel
 
@@ -58,7 +58,7 @@ def setup_persona():
 
     persona = {
         "name": name,
-        "age": age,
+        "age": int(age),
         "nationality": nationality,
         "job": job,
         "personality": personality,
@@ -86,7 +86,10 @@ def main():
             continue
 
         # 1. 연인 LLM 응답
-        tokens_used = chat_stream(client, user_input, conversation_history, persona, scenario, psychological_state)
+        tokens_used = 0
+        for event_type, value in chat_stream_gen(client, user_input, conversation_history, persona, scenario, psychological_state):
+            if event_type == "done":
+                tokens_used = value
         turn_count += 1
         total_tokens += tokens_used
         print(f"[토큰: 이번 {tokens_used} / 누적 {total_tokens}]\n")
