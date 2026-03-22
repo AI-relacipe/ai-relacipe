@@ -39,6 +39,14 @@ services:
       - REDIS_PORT=6379
       - DATABASE_URL=mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-relacipe}
 
+  voice:
+    build: ./voice
+    ports:
+      - "8001:8001"
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     ports:
@@ -49,3 +57,4 @@ services:
 volumes:
   redis_data:
   mysql_data:
+  huggingface_cache:

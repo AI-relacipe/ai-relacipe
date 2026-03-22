@@ -225,10 +225,10 @@ export default function App() {
           onClick={handleBackToList}
           style={{
             position: 'absolute', top: 8, left: 8, zIndex: 10,
-            padding: '4px 10px', borderRadius: 6,
+            width: 184, padding: '6px 0', borderRadius: 6, textAlign: 'center',
             background: activeTheme.bgPanel, color: activeTheme.textMuted,
             border: `1px solid ${activeTheme.border}`, cursor: 'pointer',
-            fontSize: 11, fontWeight: 600,
+            fontSize: 13, fontWeight: 700,
           }}
         >← 목록</button>
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>

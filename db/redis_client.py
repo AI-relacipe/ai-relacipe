@@ -40,7 +40,7 @@ def append_history(session_id, role, content):
 
 def get_history(session_id, last_n=None):
     raw_list = get_redis().lrange(f"session:{session_id}:history", 0, -1)
-    history = [json.loads(x) for x in raw_list]
+    history = [{"role": h["role"], "content": h["content"]} for h in (json.loads(x) for x in raw_list)]
     return history[-last_n:] if last_n else history
 
 

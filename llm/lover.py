@@ -5,9 +5,9 @@ MAX_TURNS = 10
 def get_recent_history(history, max_turns=MAX_TURNS):
     return history[-(max_turns * 2):]
 
-def chat_stream_gen(client, user_input, history, persona, scenario, state, extra_context="", user_info=None, user_emotion=None, chat_type=None):
+def chat_stream_gen(client, user_input, history, persona, scenario, state, extra_context="", user_info=None, user_camera_emotion=None, user_voice_emotion=None, chat_type=None):
     """API용 - 텍스트 청크를 yield하고 usage를 마지막에 yield"""
-    system_prompt = build_system_prompt(persona, scenario, state, extra_context, user_info=user_info, user_emotion=user_emotion, chat_type=chat_type)
+    system_prompt = build_system_prompt(persona, scenario, state, extra_context, user_info=user_info, user_camera_emotion=user_camera_emotion, user_voice_emotion=user_voice_emotion, chat_type=chat_type)
     history.append({"role": "user", "content": user_input})
     full_response = ""
     with client.messages.stream(

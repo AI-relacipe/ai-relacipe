@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import * as faceapi from 'face-api.js'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const VOICE_API = import.meta.env.VITE_VOICE_API_URL || 'http://localhost:8001'
 
 const lighten = (hex, amount = 26) => {
   const n = parseInt(hex.replace('#', ''), 16)
@@ -32,10 +33,13 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
   const [cameraOn, setCameraOn] = useState(false)
   const [emotion, setEmotion] = useState(null)
   const [modelsLoaded, setModelsLoaded] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
   const bottomRef = useRef(null)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const detectIntervalRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const audioChunksRef = useRef([])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping])
 
@@ -80,8 +84,39 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
 
   useEffect(() => { return () => { stopCamera() } }, [])
 
-  const sendMessage = async () => {
-    const text = input.trim()
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      audioChunksRef.current = []
+      recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        const formData = new FormData()
+        formData.append('file', blob, 'voice.webm')
+        try {
+          const res = await fetch(`${VOICE_API}/voice`, { method: 'POST', body: formData })
+          if (res.ok) {
+            const data = await res.json()
+            const resolvedEmotion = data.emotion || null
+            if (data.text?.trim()) sendMessage(data.text.trim(), resolvedEmotion)
+          }
+        } catch (e) { console.error('음성 서버 오류:', e) }
+      }
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setIsRecording(true)
+    } catch (e) { alert('마이크 접근이 거부되었습니다.') }
+  }
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop()
+    setIsRecording(false)
+  }
+
+  const sendMessage = async (overrideText, resolvedEmotion) => {
+    const text = (overrideText ?? input).trim()
     if (!text || isTyping) return
     setInput('')
     setTimeout(() => setInput(''), 0)
@@ -93,7 +128,8 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     let pendingPanel = null
     try {
       const body = { session_id: sessionId, message: text }
-      if (emotion && cameraOn) body.emotion = emotion
+      if (resolvedEmotion) body.voice_emotion = resolvedEmotion
+      if (emotion && cameraOn) body.camera_emotion = emotion
       const res = await fetch(API + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -152,11 +188,11 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
 
   const handleSaveEdit = async () => {
-    const res = await fetch(API + '/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...draft, scenario: persona.scenario }) })
+    const res = await fetch(API + '/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) })
     if (!res.ok) { alert('저장 실패'); return }
     const data = await res.json()
     setMessages([]); setEditMode(false)
-    onReset(data.session_id, { ...draft, scenario: persona.scenario })
+    onReset(data.session_id, draft)
   }
 
   const s = makeStyles(theme)
@@ -164,15 +200,24 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
   return (
     <div style={s.wrap}>
       <div style={s.sidebar}>
-        <div style={s.avatarBtn} onClick={() => { setEditMode(v => !v); setDraft(persona) }}>{persona.name[0]}</div>
+        <div style={s.avatarBtn} onClick={() => { setEditMode(v => !v); setDraft({...persona}) }}>{persona.name[0]}</div>
         {editMode ? (
           <>
             <span style={s.sideLabel}>수정</span>
             {FIELDS.map(f => (<div key={f.key} style={s.fieldRow}><span style={s.fieldKey}>{f.label}</span><input type={f.type||'text'} value={draft[f.key]} onChange={e => setDraft(p => ({...p,[f.key]:f.type==='number'?Number(e.target.value):e.target.value}))} style={s.editInput}/></div>))}
+            <div style={s.fieldRow}>
+              <span style={s.fieldKey}>시나리오</span>
+              <textarea value={draft.scenario||''} onChange={e => setDraft(p => ({...p, scenario: e.target.value}))} rows={3} style={{...s.editInput, resize:'vertical', fontFamily:'inherit'}}/>
+            </div>
             <button onClick={handleSaveEdit} style={s.saveBtn}>저장</button>
             <button onClick={() => setEditMode(false)} style={s.cancelBtn}>취소</button>
           </>
-        ) : FIELDS.map(f => (<div key={f.key} style={s.fieldRow}><span style={s.fieldKey}>{f.label}</span><span style={s.fieldVal}>{persona[f.key]}</span></div>))}
+        ) : (
+          <>
+            {FIELDS.map(f => (<div key={f.key} style={s.fieldRow}><span style={s.fieldKey}>{f.label}</span><span style={s.fieldVal}>{persona[f.key]}</span></div>))}
+            <div style={s.fieldRow}><span style={s.fieldKey}>시나리오</span><span style={s.fieldVal}>{persona.scenario}</span></div>
+          </>
+        )}
         <div style={{marginTop:'auto',paddingTop:12}}>{themeSlot}</div>
       </div>
       <div style={s.chatColumn}>
@@ -216,6 +261,16 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
             <button onClick={toggleCamera} disabled={!modelsLoaded} style={{...s.cameraBtn,background:cameraOn?'#ef4444':theme.bgPanel,color:cameraOn?'#fff':theme.textMain}} title={cameraOn?'카메라 끄기':'표정으로 감정 전달'}>
               {cameraOn ? '📷 끄기' : '📷'}
             </button>
+            <button
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onTouchStart={startRecording}
+              onTouchEnd={stopRecording}
+              style={{...s.cameraBtn, background: isRecording ? '#ef4444' : theme.bgPanel, color: isRecording ? '#fff' : theme.textMain}}
+              title="누르고 있는 동안 녹음"
+            >
+              {isRecording ? '🎙️ 녹음 중' : '🎙️'}
+            </button>
             <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="메시지 입력..." style={s.input}/>
             <button onClick={sendMessage} disabled={isTyping} style={s.sendBtn}>전송</button>
           </div></div>
@@ -227,8 +282,8 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
 
 const makeStyles=(t)=>({
   wrap:{display:'flex',flexDirection:'row',height:'100%',width:'100%',overflow:'hidden'},
-  sidebar:{width:160,flexShrink:0,background:t.bgBase,borderRight:'1px solid '+t.border,display:'flex',flexDirection:'column',gap:10,padding:'16px 12px',overflowY:'auto'},
-  avatarBtn:{width:56,height:56,borderRadius:'50%',background:t.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:700,color:'#fff',cursor:'pointer',alignSelf:'center',marginBottom:6,flexShrink:0},
+  sidebar:{width:200,flexShrink:0,background:t.bgBase,borderRight:'1px solid '+t.border,display:'flex',flexDirection:'column',gap:10,padding:'56px 16px 16px',overflowY:'auto'},
+  avatarBtn:{width:56,height:56,borderRadius:'50%',background:t.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:700,color:'#fff',cursor:'pointer',alignSelf:'center',marginBottom:16,flexShrink:0},
   sideLabel:{fontSize:12,color:t.textMuted,fontWeight:600},
   fieldRow:{display:'flex',flexDirection:'column',gap:2},fieldKey:{fontSize:11,color:t.textMuted},fieldVal:{fontSize:14,color:t.textMain,wordBreak:'break-all'},
   editInput:{padding:'3px 6px',borderRadius:4,border:'1px solid '+t.border,background:t.bgInput,color:t.textMain,fontSize:13,outline:'none',width:'100%'},

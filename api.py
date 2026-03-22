@@ -78,7 +78,8 @@ class SetupRequest(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    emotion: dict = None
+    camera_emotion: dict = None
+    voice_emotion: dict = None
 
 
 @app.post("/session")
@@ -215,7 +216,7 @@ def resume_session(session_id: str, token: str = "", db: Session = Depends(get_d
             "persona": persona,
             "scenario": chat_session.scenario,
             "chat_type": chat_session.chat_type,
-            "history": history,
+            "history": [{"role": m["role"], "content": m["content"]} for m in history],
             "psychological_state": {"emotion": "대화 재개", "direction": "이전 대화 이어가기"},
             "turn_count": len(history) // 2,
             "user_info": {
@@ -235,8 +236,10 @@ def resume_session(session_id: str, token: str = "", db: Session = Depends(get_d
 @app.post("/chat")
 def chat(req: ChatRequest):
     _log(f"[요청] /chat 호출됨 - session={req.session_id} msg={req.message[:20]}")
-    if req.emotion:
-        _log(f"[표정] {req.emotion.get('label', '없음')} ({req.emotion.get('score', 0)*100:.0f}%)")
+    if req.camera_emotion:
+        _log(f"[카메라 감정] {req.camera_emotion.get('label', '없음')} ({req.camera_emotion.get('score', 0)*100:.0f}%)")
+    if req.voice_emotion:
+        _log(f"[음성 감정] {req.voice_emotion.get('label', '없음')} ({req.voice_emotion.get('score', 0)*100:.0f}%)")
     with sessions_lock:
         session = sessions.get(req.session_id)
     if not session:
@@ -261,7 +264,8 @@ def chat(req: ChatRequest):
                 session["persona"], session["scenario"], state,
                 extra_context=llm_ctx["extra_context"],
                 user_info=session["user_info"],
-                user_emotion=req.emotion,
+                user_camera_emotion=req.camera_emotion,
+                user_voice_emotion=req.voice_emotion,
                 chat_type=chat_type,
             ):
                 if event_type == "text":

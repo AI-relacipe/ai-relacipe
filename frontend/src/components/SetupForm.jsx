@@ -22,7 +22,7 @@ const fields = [
 ]
 
 export default function SetupForm({ onStart, theme }) {
-  // chat_type은 시나리오 기반 자동 판별 (백엔드 context.py의 _infer_chat_type)
+  const [chatType, setChatType] = useState('online')
   const [step, setStep] = useState(1)
   const [visible, setVisible] = useState(true)
   const [myInfo, setMyInfo] = useState({})
@@ -47,7 +47,7 @@ export default function SetupForm({ onStart, theme }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const merged = { ...myInfo, ...Object.fromEntries(new FormData(e.target)) }
+    const merged = { ...myInfo, ...Object.fromEntries(new FormData(e.target)), chat_type: chatType }
     merged.age = Number(merged.age)
     // 로그인 토큰 포함
     const token = localStorage.getItem('token')
@@ -112,6 +112,15 @@ export default function SetupForm({ onStart, theme }) {
             <div style={s.row}>
               <label style={s.label}>시나리오</label>
               <textarea name="scenario" required rows={3} defaultValue="퇴근 후, 각자 집에서 카카오톡으로 연락하는 상황" style={{ ...s.input, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+            <div style={s.row}>
+              <label style={s.label}>대화방식</label>
+              <div style={{ display: 'flex', gap: 8, flex: 1 }}>
+                <button type="button" onClick={() => setChatType('online')}
+                  style={{ ...s.modeBtn, background: chatType === 'online' ? theme.primary : '#333' }}>메신저</button>
+                <button type="button" onClick={() => setChatType('offline')}
+                  style={{ ...s.modeBtn, background: chatType === 'offline' ? theme.primary : '#333' }}>직접 만남</button>
+              </div>
             </div>
 
             <button type="button" onClick={goBack} style={{ ...s.btn, background: '#333' }}>이전</button>
