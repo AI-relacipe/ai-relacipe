@@ -183,13 +183,13 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
               }
             } else if (eventType === 'panel_start') {
               pendingPanelStart = true
+              onPanelStart()
             } else if (eventType === 'panel') {
               try { pendingPanel = JSON.parse(data) } catch { }
             }
           }
         }
       }
-      if (pendingPanelStart) onPanelStart()
       if (pendingPanel) onPanel(pendingPanel)
     } finally {
       // stream_done 못 받은 경우 스트리밍 버블 강제 확정

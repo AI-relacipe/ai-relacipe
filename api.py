@@ -55,6 +55,17 @@ def on_startup():
     try:
         init_db()
         _log("[DB] MySQL 테이블 초기화 완료")
+        # 기존 테이블에 누락된 컬럼 추가 (마이그레이션)
+        from db.mysql_client import engine
+        with engine.connect() as conn:
+            try:
+                conn.execute(__import__('sqlalchemy').text(
+                    "ALTER TABLE chat_sessions ADD COLUMN profile_image VARCHAR(500) NULL"
+                ))
+                conn.commit()
+                _log("[DB] profile_image 컬럼 추가 완료")
+            except Exception:
+                pass  # 이미 존재하면 무시
     except Exception as e:
         _log(f"[DB] MySQL 연결 실패 (Redis만 사용): {repr(e)}")
 
@@ -263,9 +274,8 @@ def resume_session(session_id: str, token: str = "", db: Session = Depends(get_d
 
     return {
         "persona": persona,
-        "history": [{"role": m["role"], "content": m["content"]} for m in history],
-        "profile_image": chat_session.profile_image or None,
         "history": display_history,
+        "profile_image": chat_session.profile_image or None,
         "panels": panel_pairs,
     }
 
@@ -364,9 +374,8 @@ def chat(req: ChatRequest):
                 _log(f"[에러] 인트로 패널 실패: {repr(e)}")
 
         # Redis에 assistant 저장 (user는 요청 시점에 이미 저장됨)
+        # session["history"]는 lover.py 내부에서 이미 append됨 (user+assistant)
         append_history(req.session_id, "assistant", full_response)
-        session["history"].append({"role": "user", "content": req.message})
-        session["history"].append({"role": "assistant", "content": full_response})
 
         # MySQL에 assistant 저장 + 세션 updated_at 갱신
         # 온라인 모드: \n 기준으로 row 분리 (버블 1개 = row 1개)
