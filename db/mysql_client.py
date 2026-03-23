@@ -40,6 +40,7 @@ class ChatSession(Base):
     scenario = Column(String(200), nullable=False)
     chat_type = Column(String(20), default="online")
     persona_json = Column(Text)  # 전체 페르소나 JSON 저장
+    profile_image = Column(String(500), nullable=True)  # 프로필 이미지 URL
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 

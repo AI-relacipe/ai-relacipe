@@ -9,3 +9,4 @@ pymysql
 cryptography
 bcrypt
 pyjwt
+python-multipart

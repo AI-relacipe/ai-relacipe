@@ -9,9 +9,10 @@ sys.stdout.reconfigure(encoding="utf-8")
 def _log(msg):
     print(msg, flush=True)
 
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 import anthropic
@@ -43,6 +44,10 @@ app.add_middleware(
 
 # 인증 라우터 등록
 app.include_router(auth_router)
+
+# 프로필 이미지 저장 폴더
+os.makedirs("static/profiles", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # DB 테이블 생성
 @app.on_event("startup")
@@ -258,6 +263,8 @@ def resume_session(session_id: str, token: str = "", db: Session = Depends(get_d
 
     return {
         "persona": persona,
+        "history": [{"role": m["role"], "content": m["content"]} for m in history],
+        "profile_image": chat_session.profile_image or None,
         "history": display_history,
         "panels": panel_pairs,
     }
@@ -426,6 +433,60 @@ def chat(req: ChatRequest):
         yield f"event: done\ndata: {{}}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.post("/upload/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    token: str = Form(...),
+):
+    """패널 아바타 이미지 업로드 (세션 무관)"""
+    verify_token(token)
+    ext = os.path.splitext(file.filename)[-1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
+        raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다.")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join("static", "profiles", filename)
+    contents = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(contents)
+    return {"image_url": f"/static/profiles/{filename}"}
+
+
+@app.post("/upload/profile")
+async def upload_profile(
+    file: UploadFile = File(...),
+    session_id: str = Form(...),
+    token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """프로필 이미지 업로드"""
+    payload = verify_token(token)
+
+    # 확장자 검사
+    ext = os.path.splitext(file.filename)[-1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
+        raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다.")
+
+    # 저장
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join("static", "profiles", filename)
+    contents = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    image_url = f"/static/profiles/{filename}"
+
+    # DB 업데이트
+    chat_session = db.query(ChatSession).filter(
+        ChatSession.session_id == session_id,
+        ChatSession.user_id == payload["user_id"],
+    ).first()
+    if chat_session:
+        chat_session.profile_image = image_url
+        db.commit()
+
+    return {"image_url": image_url}
 
 
 @app.delete("/session/{session_id}")
