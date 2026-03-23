@@ -276,6 +276,12 @@ def chat(req: ChatRequest):
         _log(f"[404] 세션 없음 - {req.session_id} / 현재 세션: {list(sessions.keys())}")
         raise HTTPException(status_code=404, detail="세션이 존재하지 않습니다.")
 
+    # 감정 1메시지 전까지만 유지 (prev → 이전 메시지, last → 현재 메시지)
+    session["prev_camera_emotion"] = session.get("last_camera_emotion")
+    session["prev_voice_emotion"] = session.get("last_voice_emotion")
+    session["last_camera_emotion"] = req.camera_emotion if req.camera_emotion and req.camera_emotion.get("label") != "neutral" else None
+    session["last_voice_emotion"] = req.voice_emotion if req.voice_emotion else None
+
     # 사용자 메시지 즉시 저장
     # Redis: 합쳐서 1개 (LLM 컨텍스트용)
     # MySQL: \n 기준으로 row 분리 (버블 1개 = row 1개)
@@ -396,10 +402,14 @@ def chat(req: ChatRequest):
             _log(f"[트리거] {trigger.get('reason')} → 패널 생성 중")
             yield f"event: panel_start\ndata: \n\n"
             try:
+                cam_emotion = session.get("last_camera_emotion") or session.get("prev_camera_emotion")
+                voice_emotion = session.get("last_voice_emotion") or session.get("prev_voice_emotion")
                 panel = run_mc_panel(
                     client, req.session_id, trigger["context"],
                     persona_name=session["persona"]["name"],
                     user_name=session["user_info"].get("name", "사용자"),
+                    user_camera_emotion=cam_emotion,
+                    user_voice_emotion=voice_emotion,
                 )
                 _log(f"[MC→패널] {trigger['context'][:80]}...")
                 _log(f"[T형] {panel['t_panel']}")
