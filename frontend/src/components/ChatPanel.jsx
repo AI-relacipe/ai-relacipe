@@ -40,6 +40,8 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
   const detectIntervalRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const audioChunksRef = useRef([])
+  const queueRef = useRef([])
+  const processingRef = useRef(false)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping])
 
@@ -115,17 +117,11 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     setIsRecording(false)
   }
 
-  const sendMessage = async (overrideText, resolvedEmotion) => {
-    const text = (overrideText ?? input).trim()
-    if (!text || isTyping) return
-    setInput('')
-    setTimeout(() => setInput(''), 0)
-    setMessages(prev => [...prev, { role: 'user', content: text }])
-    setIsTyping(true)
-    let aiText = ''
-    let currentLine = ''
+  const callAPI = async (text, resolvedEmotion) => {
+    let fullText = ''
     let pendingPanelStart = false
     let pendingPanel = null
+    const isOnline = persona.chat_type === 'online'
     try {
       const body = { session_id: sessionId, message: text }
       if (resolvedEmotion) body.voice_emotion = resolvedEmotion
@@ -145,22 +141,35 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
           else if (line.startsWith('data: ')) {
             const data = line.slice(6).trim()
             if (eventType === 'text') {
-              try { const chunk = JSON.parse(data); aiText += chunk; currentLine += chunk } catch { aiText += data; currentLine += data }
-              if (persona.chat_type === 'online' && currentLine.includes('\n')) {
-                const parts = currentLine.split('\n')
-                currentLine = parts.pop()
-                for (const part of parts) {
-                  if (!part.trim()) continue
-                  setMessages(prev => [...prev, { role: 'assistant', content: part, typing: false }])
-                  await new Promise(r => setTimeout(r, part.length * 250))
-                }
+              let chunk = ''
+              try { chunk = JSON.parse(data) } catch { chunk = data }
+              fullText += chunk
+              if (!isOnline) {
+                // 오프라인: 스트리밍 버블 실시간 업데이트 (타이핑 효과)
+                setMessages(prev => {
+                  const last = prev[prev.length - 1]
+                  if (last?.streaming) return [...prev.slice(0, -1), { ...last, content: last.content + chunk }]
+                  return [...prev, { role: 'assistant', content: chunk, streaming: true }]
+                })
               }
+              // 온라인: fullText만 쌓고 화면엔 안 보여줌 (flash 방지)
             } else if (eventType === 'stream_done') {
-              if (currentLine.trim()) {
-                setMessages(prev => [...prev, { role: 'assistant', content: currentLine.trim(), typing: false }])
-                currentLine = ''
+              if (isOnline) {
+                // 온라인: stream_done 후에 분리된 말풍선 순차 출력
+                const parts = fullText.split('\n').filter(p => p.trim())
+                for (const part of parts) {
+                  setMessages(prev => [...prev, { role: 'assistant', content: part }])
+                  await new Promise(r => setTimeout(r, Math.min(part.length * 200, 2000)))
+                }
+              } else {
+                // 오프라인: 스트리밍 버블 확정
+                setMessages(prev => {
+                  const last = prev[prev.length - 1]
+                  if (last?.streaming) return [...prev.slice(0, -1), { ...last, streaming: false }]
+                  if (fullText.trim()) return [...prev, { role: 'assistant', content: fullText.trim() }]
+                  return prev
+                })
               }
-              setIsTyping(false)
             } else if (eventType === 'panel_start') {
               pendingPanelStart = true
             } else if (eventType === 'panel') {
@@ -169,20 +178,38 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
           }
         }
       }
-      if (aiText.trim()) {
-        setMessages(prev => {
-          const alreadyAdded = prev.some(m => m.role === 'assistant' && m.content && aiText.includes(m.content))
-          if (!alreadyAdded) {
-            return [...prev, { role: 'assistant', content: aiText.trim(), typing: false }]
-          }
-          return prev
-        })
-      }
       if (pendingPanelStart) onPanelStart()
       if (pendingPanel) onPanel(pendingPanel)
     } finally {
-      setIsTyping(false)
+      // stream_done 못 받은 경우 스트리밍 버블 강제 확정
+      setMessages(prev => {
+        const last = prev[prev.length - 1]
+        if (last?.streaming) return [...prev.slice(0, -1), { ...last, streaming: false }]
+        return prev
+      })
     }
+  }
+
+  const processQueue = async () => {
+    if (processingRef.current) return
+    processingRef.current = true
+    setIsTyping(true)
+    while (queueRef.current.length > 0) {
+      const { text, resolvedEmotion } = queueRef.current.shift()
+      await callAPI(text, resolvedEmotion)
+    }
+    processingRef.current = false
+    setIsTyping(false)
+  }
+
+  const sendMessage = (overrideText, resolvedEmotion) => {
+    const text = (overrideText ?? input).trim()
+    if (!text) return
+    setInput('')
+    setTimeout(() => setInput(''), 0)
+    setMessages(prev => [...prev, { role: 'user', content: text }])
+    queueRef.current.push({ text, resolvedEmotion })
+    processQueue()
   }
 
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
@@ -245,7 +272,10 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
                       : <div style={{ width: 32, flexShrink: 0 }} />
                     }
                     <div style={s.bubbleAI}>
-                      {msg.typing ? <span style={s.typing}>···</span> : msg.content}
+                      {msg.typing
+                        ? <span style={s.typing}>···</span>
+                        : <>{msg.content}{msg.streaming && <span style={s.cursor}>▌</span>}</>
+                      }
                     </div>
                   </div>
                 )
@@ -272,7 +302,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
               {isRecording ? '🎙️ 녹음 중' : '🎙️'}
             </button>
             <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="메시지 입력..." style={s.input}/>
-            <button onClick={sendMessage} disabled={isTyping} style={s.sendBtn}>전송</button>
+            <button onClick={() => sendMessage()} style={s.sendBtn}>전송</button>
           </div></div>
         </div>
       </div>
@@ -301,6 +331,7 @@ const makeStyles=(t)=>({
   bubbleUser:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 4px 18px',background:'#fee500',color:'#000',fontSize:14,lineHeight:1.5},
   bubbleAI:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 18px 4px',background:lighten(t.bgPanel),color:t.textMain,fontSize:14,lineHeight:1.5},
   typing:{fontSize:18,letterSpacing:3,color:t.textMuted},
+  cursor:{animation:'blink 0.8s step-end infinite',marginLeft:2,color:t.textMuted},
   bottomArea:{flexShrink:0,borderTop:'1px solid '+t.border,background:t.bgBase},
   cameraPreview:{display:'flex',justifyContent:'center',alignItems:'center',padding:'8px 16px',gap:8,position:'relative'},
   video:{width:200,height:150,borderRadius:12,objectFit:'cover',border:'2px solid '+t.accent,transform:'scaleX(-1)'},

@@ -28,8 +28,8 @@ export default function PanelSection({ panels, isActive, theme }) {
             ) : (
               panels.map((p, i) => (
                 <div key={i} style={s.panelGroup}>
-                  <PanelBubble label="T" color={theme.primary} text={p.t} theme={theme} />
-                  <PanelBubble label="F" color={theme.accent} text={p.f} theme={theme} />
+                  <PanelBubble label="T" color={theme.primary} text={p.t} theme={theme} side="left" />
+                  <PanelBubble label="F" color={theme.accent} text={p.f} theme={theme} side="right" />
                 </div>
               ))
             )}
@@ -53,20 +53,22 @@ export default function PanelSection({ panels, isActive, theme }) {
   )
 }
 
-function PanelBubble({ label, color, text, theme }) {
+function PanelBubble({ label, color, text, theme, side }) {
+  const isLeft = side === 'left'
   return (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', flexDirection: isLeft ? 'row' : 'row-reverse', gap: 10, alignItems: 'flex-start' }}>
       <div style={{
         width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 13, fontWeight: 700, color: '#fff', background: color,
       }}>{label}</div>
       <div style={{
-        flex: 1, padding: '10px 14px', borderRadius: '0 14px 14px 14px',
+        maxWidth: '75%', padding: '10px 14px',
+        borderRadius: isLeft ? '0 14px 14px 14px' : '14px 0 14px 14px',
         background: theme.bgPanel, border: `1px solid ${color}`,
         display: 'flex', flexDirection: 'column', gap: 4,
       }}>
-        <span style={{ color, fontSize: 11, fontWeight: 700 }}>{label}형</span>
+        <span style={{ color, fontSize: 11, fontWeight: 700, textAlign: isLeft ? 'left' : 'right' }}>{label}형</span>
         <p style={{ fontSize: 13, color: theme.textMain, lineHeight: 1.6, margin: 0 }}>{text}</p>
       </div>
     </div>
