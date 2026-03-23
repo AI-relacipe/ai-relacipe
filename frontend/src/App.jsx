@@ -129,7 +129,7 @@ export default function App() {
           chat_type: session.chat_type,
         })
         setInitialHistory(data.history || [])
-        setPanels([])
+        setPanels(data.panels || [])
         setIsPanelActive(false)
         setScreen('chat')
       } else {
