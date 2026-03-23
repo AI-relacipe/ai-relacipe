@@ -1,3 +1,4 @@
+from config import LLM_MODEL
 import os
 import sys
 
@@ -17,7 +18,7 @@ def generate_initial_state(client, persona, scenario):
     import json
     import re
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=LLM_MODEL,
         max_tokens=128,
         temperature=0.5,
         messages=[{"role": "user", "content": f"""

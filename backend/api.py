@@ -1,3 +1,4 @@
+from config import LLM_MODEL
 import json
 import os
 import sys
@@ -56,6 +57,50 @@ from mc.orchestrator import (
 )
 
 app = FastAPI()
+
+
+def _db_save_messages(session_id: str, role: str, content: str, split_newline: bool = False):
+    """MySQL에 메시지 저장. split_newline=True면 \n 기준으로 row 분리."""
+    try:
+        db = SessionLocal()
+        try:
+            parts = [p for p in content.split('\n') if p.strip()] if split_newline else [content]
+            for part in parts:
+                db.add(ChatMessage(session_id=session_id, role=role, content=part))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        _log(f"[DB] 메시지 저장 실패 ({role}): {repr(e)}")
+
+
+def _db_save_panel(session_id: str, t_text: str, f_text: str):
+    """MySQL에 패널 저장."""
+    try:
+        db = SessionLocal()
+        try:
+            db.add(ChatPanelModel(session_id=session_id, t_text=t_text, f_text=f_text))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        _log(f"[DB] 패널 저장 실패: {repr(e)}")
+
+
+def _db_update_session_time(session_id: str):
+    """ChatSession updated_at 갱신."""
+    from datetime import datetime
+    try:
+        db = SessionLocal()
+        try:
+            db.query(ChatSession).filter(ChatSession.session_id == session_id).update(
+                {"updated_at": datetime.utcnow()}
+            )
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        _log(f"[DB] 세션 시간 갱신 실패: {repr(e)}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -155,7 +200,7 @@ def create_session(req: SetupRequest, db: Session = Depends(get_db)):
 {{"emotion": "현재 감정 상태 30자 이내", "direction": "행동 방향 30자 이내"}}
 """
     resp = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=LLM_MODEL,
         max_tokens=128,
         temperature=0.3,
         messages=[{"role": "user", "content": init_prompt}]
@@ -325,16 +370,7 @@ def chat(req: ChatRequest):
     # Redis: 합쳐서 1개 (LLM 컨텍스트용)
     # MySQL: \n 기준으로 row 분리 (버블 1개 = row 1개)
     append_history(req.session_id, "user", req.message)
-    try:
-        db_user = SessionLocal()
-        try:
-            for part in [p.strip() for p in req.message.split('\n') if p.strip()]:
-                db_user.add(ChatMessage(session_id=req.session_id, role="user", content=part))
-            db_user.commit()
-        finally:
-            db_user.close()
-    except Exception as e:
-        _log(f"[DB] 사용자 메시지 저장 실패: {repr(e)}")
+    _db_save_messages(req.session_id, "user", req.message, split_newline=True)
 
     llm_ctx = build_llm_context(req.session_id)
 
@@ -389,15 +425,7 @@ def chat(req: ChatRequest):
                 )
                 yield f"event: panel\ndata: {payload}\n\n"
                 append_panel_pair(req.session_id, intro["t_panel"], intro["f_panel"])
-                try:
-                    db_p = SessionLocal()
-                    try:
-                        db_p.add(ChatPanelModel(session_id=req.session_id, t_text=intro["t_panel"], f_text=intro["f_panel"]))
-                        db_p.commit()
-                    finally:
-                        db_p.close()
-                except Exception as db_e:
-                    _log(f"[DB] 패널 MySQL 저장 실패: {repr(db_e)}")
+                _db_save_panel(req.session_id, intro["t_panel"], intro["f_panel"])
             except Exception as e:
                 _log(f"[에러] 인트로 패널 실패: {repr(e)}")
 
@@ -407,22 +435,9 @@ def chat(req: ChatRequest):
 
         # MySQL에 assistant 저장 + 세션 updated_at 갱신
         # 온라인 모드: \n 기준으로 row 분리 (버블 1개 = row 1개)
-        try:
-            from datetime import datetime
-            db_msg = SessionLocal()
-            try:
-                is_online = chat_type == "online"
-                parts = [p for p in full_response.split('\n') if p.strip()] if is_online else [full_response]
-                for part in parts:
-                    db_msg.add(ChatMessage(session_id=req.session_id, role="assistant", content=part))
-                db_msg.query(ChatSession).filter(ChatSession.session_id == req.session_id).update(
-                    {"updated_at": datetime.utcnow()}
-                )
-                db_msg.commit()
-            finally:
-                db_msg.close()
-        except Exception as e:
-            _log(f"[DB] assistant 메시지 저장 실패: {repr(e)}")
+        is_online = chat_type == "online"
+        _db_save_messages(req.session_id, "assistant", full_response, split_newline=is_online)
+        _db_update_session_time(req.session_id)
 
         if should_summarize(req.session_id):
             run_summary_and_facts(client, req.session_id)
@@ -458,15 +473,7 @@ def chat(req: ChatRequest):
                 )
                 yield f"event: panel\ndata: {payload}\n\n"
                 append_panel_pair(req.session_id, panel["t_panel"], panel["f_panel"])
-                try:
-                    db_p = SessionLocal()
-                    try:
-                        db_p.add(ChatPanelModel(session_id=req.session_id, t_text=panel["t_panel"], f_text=panel["f_panel"]))
-                        db_p.commit()
-                    finally:
-                        db_p.close()
-                except Exception as db_e:
-                    _log(f"[DB] 패널 MySQL 저장 실패: {repr(db_e)}")
+                _db_save_panel(req.session_id, panel["t_panel"], panel["f_panel"])
             except Exception as e:
                 _log(f"[에러] 패널 생성 실패: {repr(e)}")
                 yield f"event: error\ndata: {json.dumps({'error': '패널 생성 실패'}, ensure_ascii=False)}\n\n"

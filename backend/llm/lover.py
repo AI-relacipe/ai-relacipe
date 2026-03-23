@@ -1,3 +1,4 @@
+from config import LLM_MODEL
 import time
 
 from llm.context import build_system_prompt
@@ -31,7 +32,7 @@ def chat_stream_gen(client, user_input, history, persona, scenario, state, extra
         time.sleep(delay)
     full_response = ""
     with client.messages.stream(
-        model="claude-haiku-4-5-20251001",
+        model=LLM_MODEL,
         max_tokens=128,
         system=system_prompt,
         messages=get_recent_history(history)

@@ -1,3 +1,4 @@
+from config import LLM_MODEL
 """
 MC 오케스트레이터
 - 요약 + fact 추출 (10메시지마다)
@@ -25,7 +26,7 @@ SUMMARY_INTERVAL = 10  # 메시지 10개마다 요약
 def _llm(client, prompt, max_tokens=512, temperature=0.3, timeout=20.0):
     try:
         resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=LLM_MODEL,
             max_tokens=max_tokens,
             temperature=temperature,
             timeout=timeout,
@@ -222,7 +223,7 @@ def run_mc_panel(client, session_id, trigger_context, persona_name="연인", use
     for step in range(MAX_STEPS):
         try:
             resp = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=LLM_MODEL,
                 max_tokens=512,
                 temperature=0.7,
                 timeout=30.0,

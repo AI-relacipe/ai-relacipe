@@ -7,8 +7,7 @@ import ChatPanel from './components/ChatPanel'
 import PanelSection from './components/PanelSection'
 import LandingPage from './components/LandingPage'
 import { theme as defaultTheme, THEMES } from './theme'
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API } from './utils/api'
 
 function ThemeSwitcher({ activeTheme, onChange }) {
   const [open, setOpen] = useState(false)

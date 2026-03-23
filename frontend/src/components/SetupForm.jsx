@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API } from '../utils/api'
 
 // 사용자 초기 정보
 const userFields = [

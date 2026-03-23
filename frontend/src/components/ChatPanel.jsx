@@ -2,9 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import * as faceapi from 'face-api.js'
 import { getDominantColor } from '../utils/colorUtils'
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const VOICE_API = import.meta.env.VITE_VOICE_API_URL || 'http://localhost:8001'
+import { API, VOICE_API } from '../utils/api'
 
 const lighten = (hex, amount = 26) => {
   const n = parseInt(hex.replace('#', ''), 16)
@@ -52,8 +50,13 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
   const queueRef = useRef([])
   const processingRef = useRef(false)
   const debounceTimerRef = useRef(null)
+  const abortControllerRef = useRef(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping])
+
+  useEffect(() => {
+    return () => { abortControllerRef.current?.abort() }
+  }, [])
 
   useEffect(() => {
     const load = async () => {
@@ -129,15 +132,16 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
 
   const callAPI = async (text, resolvedEmotion, rapidFollowup = false) => {
     let fullText = ''
-    let pendingPanelStart = false
     let pendingPanel = null
     const isOnline = persona.chat_type === 'online'
+    const controller = new AbortController()
+    abortControllerRef.current = controller
     try {
       const body = { session_id: sessionId, message: text }
       if (resolvedEmotion) body.voice_emotion = resolvedEmotion
       if (emotion && cameraOn) body.camera_emotion = emotion
       if (rapidFollowup) body.rapid_followup = true
-      const res = await fetch(API + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const res = await fetch(API + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal })
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = '', eventType = ''
@@ -182,7 +186,6 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
                 })
               }
             } else if (eventType === 'panel_start') {
-              pendingPanelStart = true
               onPanelStart()
             } else if (eventType === 'panel') {
               try { pendingPanel = JSON.parse(data) } catch { }
@@ -191,6 +194,9 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
         }
       }
       if (pendingPanel) onPanel(pendingPanel)
+    } catch (e) {
+      if (e.name === 'AbortError') return  // 채팅방 이동으로 인한 취소 - 무시
+      throw e
     } finally {
       // stream_done 못 받은 경우 스트리밍 버블 강제 확정
       setMessages(prev => {
