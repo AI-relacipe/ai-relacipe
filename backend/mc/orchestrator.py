@@ -8,13 +8,16 @@ import json
 import re
 
 from db.redis_client import (
-    get_history, get_history_count,
-    get_facts, merge_facts,
-    get_summaries, append_summary,
     append_panel_history,
+    append_summary,
+    get_facts,
+    get_history,
+    get_history_count,
+    get_summaries,
+    merge_facts,
 )
-from mc.prompts import SUMMARY_AND_FACT_PROMPT, MC_AGENT_PROMPT
-from llm.panel import T_PANEL_PROMPT, F_PANEL_PROMPT
+from llm.panel import F_PANEL_PROMPT, T_PANEL_PROMPT
+from mc.prompts import MC_AGENT_PROMPT, SUMMARY_AND_FACT_PROMPT
 
 SUMMARY_INTERVAL = 10  # 메시지 10개마다 요약
 

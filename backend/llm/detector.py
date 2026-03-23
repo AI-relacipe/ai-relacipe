@@ -1,6 +1,7 @@
 import json
 import re
 
+
 def detect_trigger(client, history, turn_count, psychological_state):
     if turn_count < 3:
         return {"trigger": False, "reason": "없음", "context": "", "new_state": None}

@@ -3,13 +3,14 @@
 """
 import os
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
+
 import bcrypt
 import jwt
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from db.mysql_client import get_db, User
+from db.mysql_client import User, get_db
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

@@ -1,19 +1,21 @@
-import anthropic
-from dotenv import load_dotenv
 import os
 import sys
+
+import anthropic
+from dotenv import load_dotenv
 
 sys.stdout.reconfigure(encoding="utf-8")
 load_dotenv()
 
-from llm.lover import chat_stream_gen
 from llm.detector import detect_trigger
+from llm.lover import chat_stream_gen
 from llm.panel import run_panel
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 def generate_initial_state(client, persona, scenario):
-    import json, re
+    import json
+    import re
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=128,
@@ -104,11 +106,11 @@ def main():
         # 3. 패널 개입
         if trigger["trigger"]:
             panel = run_panel(client, trigger["context"])
-            print(f"--- 패널 ---")
+            print("--- 패널 ---")
             print(f"[MC]   {panel['mc']}")
             print(f"[T]    {panel['t_panel']}")
             print(f"[F]    {panel['f_panel']}")
-            print(f"------------\n")
+            print("------------\n")
 
 if __name__ == "__main__":
     main()

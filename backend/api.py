@@ -1,37 +1,59 @@
 import json
-import uuid
 import os
 import sys
 import threading
+import uuid
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 def _log(msg):
     print(msg, flush=True)
 
-from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form
+from typing import Optional
+
+import anthropic
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional
-import anthropic
-from dotenv import load_dotenv
 
 load_dotenv()
 
-from llm.lover import chat_stream_gen
-from llm.detector import detect_trigger
-from db.redis_client import (
-    save_meta, get_meta, append_history, get_history,
-    save_state, delete_session as redis_delete_session,
-    append_panel_pair, get_panel_pairs,
-)
-from mc.orchestrator import should_summarize, run_summary_and_facts, build_llm_context, run_mc_panel
-from llm.panel import run_intro_panel
-from auth import router as auth_router, verify_token
-from db.mysql_client import init_db, get_db, SessionLocal, ChatSession, ChatMessage, ChatPanel as ChatPanelModel, User
 from sqlalchemy.orm import Session
+
+from auth import router as auth_router
+from auth import verify_token
+from db.mysql_client import (
+    ChatMessage,
+    ChatSession,
+    SessionLocal,
+    get_db,
+    init_db,
+)
+from db.mysql_client import ChatPanel as ChatPanelModel
+from db.redis_client import (
+    append_history,
+    append_panel_pair,
+    get_history,
+    get_meta,
+    get_panel_pairs,
+    save_meta,
+    save_state,
+)
+from db.redis_client import (
+    delete_session as redis_delete_session,
+)
+from llm.detector import detect_trigger
+from llm.lover import chat_stream_gen
+from llm.panel import run_intro_panel
+from mc.orchestrator import (
+    build_llm_context,
+    run_mc_panel,
+    run_summary_and_facts,
+    should_summarize,
+)
 
 app = FastAPI()
 
@@ -343,17 +365,17 @@ def chat(req: ChatRequest):
         except Exception as e:
             _log(f"[에러] LLM 응답 실패: {repr(e)}")
             yield f"event: error\ndata: {json.dumps({'error': 'LLM 응답 실패'}, ensure_ascii=False)}\n\n"
-            yield f"event: done\ndata: {{}}\n\n"
+            yield "event: done\ndata: {}\n\n"
             return
 
-        yield f"event: stream_done\ndata: {{}}\n\n"
+        yield "event: stream_done\ndata: {}\n\n"
 
         _log(f"[{name}] {full_response}")
         session["turn_count"] += 1
 
         # ── 인트로 패널 (첫 번째 메시지일 때) ──
         if session["turn_count"] == 1:
-            yield f"event: panel_start\ndata: \n\n"
+            yield "event: panel_start\ndata: \n\n"
             try:
                 persona = session["persona"]
                 persona_context = f"""이름: {persona['name']}, 나이: {persona['age']}, 성별: {persona['gender']}
@@ -416,7 +438,7 @@ def chat(req: ChatRequest):
             save_state(req.session_id, session["psychological_state"])
         if trigger.get("trigger"):
             _log(f"[트리거] {trigger.get('reason')} → 패널 생성 중")
-            yield f"event: panel_start\ndata: \n\n"
+            yield "event: panel_start\ndata: \n\n"
             try:
                 cam_emotion = session.get("last_camera_emotion") or session.get("prev_camera_emotion")
                 voice_emotion = session.get("last_voice_emotion") or session.get("prev_voice_emotion")
@@ -449,7 +471,7 @@ def chat(req: ChatRequest):
                 _log(f"[에러] 패널 생성 실패: {repr(e)}")
                 yield f"event: error\ndata: {json.dumps({'error': '패널 생성 실패'}, ensure_ascii=False)}\n\n"
 
-        yield f"event: done\ndata: {{}}\n\n"
+        yield "event: done\ndata: {}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 

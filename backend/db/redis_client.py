@@ -1,7 +1,8 @@
 import json
 import os
-import redis
 from datetime import datetime
+
+import redis
 
 FACT_KEYS = ["약속", "갈등", "관계상태", "반복패턴", "원인"]
 

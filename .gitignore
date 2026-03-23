@@ -155,4 +155,4 @@ AI_relacipe_key.pem
 frontend/.env.DS_Store
 .idea/
 
-static/
+backend/static/
