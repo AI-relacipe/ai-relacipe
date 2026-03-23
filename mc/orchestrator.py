@@ -13,8 +13,8 @@ from db.redis_client import (
     get_summaries, append_summary,
     append_panel_history,
 )
-from mc.prompts import SUMMARY_AND_FACT_PROMPT, MC_BRIEF_PROMPT
-from llm.panel import T_PANEL_PROMPT, F_PANEL_PROMPT, T_PANEL_REPLY_PROMPT
+from mc.prompts import SUMMARY_AND_FACT_PROMPT, MC_AGENT_PROMPT
+from llm.panel import T_PANEL_PROMPT, F_PANEL_PROMPT
 
 SUMMARY_INTERVAL = 10  # 메시지 10개마다 요약
 
@@ -101,10 +101,77 @@ def build_llm_context(session_id, recent_n=10):
     }
 
 
+MC_TOOLS = [
+    {
+        "name": "call_t_panel",
+        "description": "T패널(논리/팩트 중심, 덱스 스타일)에게 발언 기회를 줌. 갈등·오해·잘못된 행동 지적에 적합.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "reason": {"type": "string", "description": "T패널을 호출하는 이유 (한 줄)"}
+            },
+            "required": ["reason"],
+        },
+    },
+    {
+        "name": "call_f_panel",
+        "description": "F패널(감정/공감 중심, 이다희 스타일)에게 발언 기회를 줌. 상처·설렘·위로가 필요한 순간에 적합.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "reason": {"type": "string", "description": "F패널을 호출하는 이유 (한 줄)"}
+            },
+            "required": ["reason"],
+        },
+    },
+]
+
+MAX_STEPS = 5
+
+
+def _call_t_panel(client, mc_brief, summary, facts, context, dialogue_so_far):
+    prev_text = (
+        f"[앞서 나온 대화]\n{dialogue_so_far}\n위 대화를 참고해서 자연스럽게 이어받아 반응해."
+        if dialogue_so_far else ""
+    )
+    return _llm(
+        client,
+        T_PANEL_PROMPT.format(
+            mc_brief=mc_brief,
+            summary=summary,
+            facts=facts,
+            trigger_context=context,
+            prev_text=prev_text,
+        ),
+        max_tokens=256,
+        temperature=0.8,
+    )
+
+
+def _call_f_panel(client, mc_brief, summary, facts, context, t_response, dialogue_so_far):
+    prev_text = (
+        f"[앞서 나온 대화]\n{dialogue_so_far}\n위 대화를 참고해서 자연스럽게 이어받아 반응해."
+        if dialogue_so_far else ""
+    )
+    return _llm(
+        client,
+        F_PANEL_PROMPT.format(
+            mc_brief=mc_brief,
+            summary=summary,
+            facts=facts,
+            t_response=t_response,
+            trigger_context=context,
+            prev_text=prev_text,
+        ),
+        max_tokens=256,
+        temperature=0.8,
+    )
+
+
 def run_mc_panel(client, session_id, trigger_context, persona_name="연인", user_name="사용자"):
     """
-    패널 대화 실행: MC 브리핑 → T → F → T (2턴 교환)
-    반환: {"mc": ..., "t_panel": ..., "f_panel": ..., "t_reply": ...}
+    MC Agent: 상황 판단 후 T/F 패널을 동적으로 호출
+    반환: {"mc": ..., "t_panel": ..., "f_panel": ...}
     """
     summaries = get_summaries(session_id)
     facts = get_facts(session_id)
@@ -114,81 +181,118 @@ def run_mc_panel(client, session_id, trigger_context, persona_name="연인", use
     non_empty = {k: v for k, v in facts.items() if v}
     facts_text = (
         "\n".join([f"- {k}: {', '.join(v)}" for k, v in non_empty.items()])
-        if non_empty
-        else "없음"
+        if non_empty else "없음"
     )
 
-    # 최근 대화 텍스트 (패널이 전체 흐름을 파악하도록)
     recent_chat = "\n".join(
         [f"{'사용자' if m['role'] == 'user' else '연인'}: {m['content']}" for m in recent_history]
     ) if recent_history else "대화 없음"
 
-    # trigger_context에 최근 대화 + 이름 정보 포함
-    full_context = f"[참여자 이름]\n연인: {persona_name}\n사용자: {user_name}\n\n[최근 대화 흐름]\n{recent_chat}\n\n[트리거 상황]\n{trigger_context}"
+    full_context = (
+        f"[참여자 이름]\n연인: {persona_name}\n사용자: {user_name}\n\n"
+        f"[최근 대화 흐름]\n{recent_chat}\n\n[트리거 상황]\n{trigger_context}"
+    )
 
-    # 1. MC 브리핑
-    try:
-        mc_brief = _llm(
-            client,
-            MC_BRIEF_PROMPT.format(
-                summary=summary_text,
-                facts=facts_text,
-                recent_context=full_context,
-            ),
-            max_tokens=256,
-            temperature=0.7,
-        )
-        append_panel_history(session_id, "MC", mc_brief)
-    except Exception as e:
-        raise RuntimeError(f"MC 브리핑 실패: {repr(e)}")
+    system_prompt = MC_AGENT_PROMPT.format(
+        summary=summary_text,
+        facts=facts_text,
+        recent_context=full_context,
+    )
 
-    # 2. T패널 첫 발언
-    try:
-        t_response = _llm(
-            client,
-            T_PANEL_PROMPT.format(
-                mc_brief=mc_brief,
-                summary=summary_text,
-                facts=facts_text,
-                trigger_context=full_context,
-                prev_text="",
-            ),
-            max_tokens=256,
-            temperature=0.8,
-        )
-        append_panel_history(session_id, "T", t_response)
-    except Exception as e:
-        raise RuntimeError(f"T패널 발언 실패: {repr(e)}")
+    # Agent 루프
+    messages = [{"role": "user", "content": "패널 토론을 시작해줘."}]
+    dialogue_so_far = ""
+    t_result = ""
+    f_result = ""
+    mc_brief = ""
 
-    # 3. F패널 발언 (T 읽고 반응)
-    try:
-        f_response = _llm(
-            client,
-            F_PANEL_PROMPT.format(
-                mc_brief=mc_brief,
-                summary=summary_text,
-                facts=facts_text,
-                t_response=t_response,
-                trigger_context=full_context,
-                prev_text=f"[앞서 나온 대화]\n[T] {t_response}\n위 대화를 참고해서 자연스럽게 이어받아 반응해.",
-            ),
-            max_tokens=256,
-            temperature=0.8,
-        )
-        append_panel_history(session_id, "F", f_response)
-    except Exception as e:
-        raise RuntimeError(f"F패널 발언 실패: {repr(e)}")
+    for step in range(MAX_STEPS):
+        try:
+            resp = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=512,
+                temperature=0.7,
+                timeout=30.0,
+                system=system_prompt,
+                tools=MC_TOOLS,
+                messages=messages,
+            )
+        except Exception as e:
+            raise RuntimeError(f"MC Agent 호출 실패: {repr(e)}")
 
-    # 4. T패널 마무리 (2턴)
-    try:
-        t_reply = _llm(
-            client,
-            T_PANEL_REPLY_PROMPT.format(mc_brief=mc_brief, f_response=f_response),
-            max_tokens=256,
-            temperature=0.8,
-        )
-        append_panel_history(session_id, "T", t_reply)
-    except Exception as e:
-        raise RuntimeError(f"T패널 마무리 실패: {repr(e)}")
+        # MC의 텍스트 발언 수집 (브리핑)
+        for block in resp.content:
+            if hasattr(block, "text") and block.text.strip():
+                mc_brief = block.text.strip()
+                append_panel_history(session_id, "MC", mc_brief)
 
-    return {"mc": mc_brief, "t_panel": t_response, "f_panel": f_response, "t_reply": t_reply}
+        # 종료 조건
+        if resp.stop_reason == "end_turn":
+            break
+
+        if resp.stop_reason != "tool_use":
+            break
+
+        # 툴 호출 처리
+        messages.append({"role": "assistant", "content": resp.content})
+        tool_results = []
+
+        for block in resp.content:
+            if block.type != "tool_use":
+                continue
+
+            try:
+                if block.name == "call_t_panel":
+                    result = _call_t_panel(
+                        client, mc_brief, summary_text, facts_text, full_context, dialogue_so_far
+                    )
+                    t_result = result
+                    append_panel_history(session_id, "T", result)
+                    dialogue_so_far += f"[T] {result}\n"
+
+                elif block.name == "call_f_panel":
+                    result = _call_f_panel(
+                        client, mc_brief, summary_text, facts_text, full_context,
+                        t_result, dialogue_so_far
+                    )
+                    f_result = result
+                    append_panel_history(session_id, "F", result)
+                    dialogue_so_far += f"[F] {result}\n"
+
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                })
+
+            except Exception as e:
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": f"오류: {repr(e)}",
+                    "is_error": True,
+                })
+
+        messages.append({"role": "user", "content": tool_results})
+
+    # T 또는 F 결과 누락 시 fallback
+    if not t_result:
+        try:
+            t_result = _call_t_panel(
+                client, mc_brief, summary_text, facts_text, full_context, dialogue_so_far
+            )
+            append_panel_history(session_id, "T", t_result)
+        except Exception:
+            t_result = "상황을 좀 더 지켜봐야 할 것 같아."
+
+    if not f_result:
+        try:
+            f_result = _call_f_panel(
+                client, mc_brief, summary_text, facts_text, full_context,
+                t_result, dialogue_so_far
+            )
+            append_panel_history(session_id, "F", f_result)
+        except Exception:
+            f_result = "두 사람 마음이 다 이해돼."
+
+    return {"mc": mc_brief, "t_panel": t_result, "f_panel": f_result}

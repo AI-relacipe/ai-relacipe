@@ -91,6 +91,18 @@ def get_summaries(session_id):
     return [json.loads(x) for x in raw_list]
 
 
+# ── 패널 쌍 (t/f) ────────────────────────────────────────────────────
+
+def append_panel_pair(session_id, t_text, f_text):
+    entry = json.dumps({"t": t_text, "f": f_text}, ensure_ascii=False)
+    get_redis().rpush(f"session:{session_id}:panel_pairs", entry)
+
+
+def get_panel_pairs(session_id):
+    raw_list = get_redis().lrange(f"session:{session_id}:panel_pairs", 0, -1)
+    return [json.loads(x) for x in raw_list]
+
+
 # ── 패널 이력 ─────────────────────────────────────────────────────────
 
 def append_panel_history(session_id, speaker, content):
