@@ -322,7 +322,11 @@ def chat(req: ChatRequest):
             _log(f"[트리거] {trigger.get('reason')} → 패널 생성 중")
             yield f"event: panel_start\ndata: \n\n"
             try:
-                panel = run_mc_panel(client, req.session_id, trigger["context"])
+                panel = run_mc_panel(
+                    client, req.session_id, trigger["context"],
+                    persona_name=session["persona"]["name"],
+                    user_name=session["user_info"].get("name", "사용자"),
+                )
                 _log(f"[MC→패널] {trigger['context'][:80]}...")
                 _log(f"[T형] {panel['t_panel']}")
                 _log(f"[F형] {panel['f_panel']}")

@@ -1,0 +1,25 @@
+# 줄바꿈 자동 처리 (Mac/Windows 충돌 방지)
+* text=auto
+
+# 강제 LF (소스 코드)
+*.py text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.txt text eol=lf
+*.env text eol=lf
+
+# 바이너리 (변환 안 함)
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
