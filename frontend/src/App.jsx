@@ -122,7 +122,7 @@ export default function App() {
           profileImage: data.profile_image || null,
         })
         setInitialHistory(data.history || [])
-        setPanels([])
+        setPanels(data.panels || [])
         setIsPanelActive(false)
         navigate('/chat')
       } else {
