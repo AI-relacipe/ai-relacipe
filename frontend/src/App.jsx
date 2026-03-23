@@ -69,6 +69,7 @@ export default function App() {
   // 채팅 상태
   const [sessionId, setSessionId] = useState(null)
   const [persona, setPersona] = useState(null)
+  const [initialHistory, setInitialHistory] = useState([])
   const [panels, setPanels] = useState([])
   const [isPanelActive, setIsPanelActive] = useState(false)
   const [activeTheme, setActiveTheme] = useState(defaultTheme)
@@ -100,6 +101,7 @@ export default function App() {
   const handleNewChat = () => {
     setSessionId(null)
     setPersona(null)
+    setInitialHistory([])
     setPanels([])
     setIsPanelActive(false)
     setScreen('setup')
@@ -108,6 +110,7 @@ export default function App() {
   const handleStart = (sid, form) => {
     setSessionId(sid)
     setPersona(form)
+    setInitialHistory([])
     setPanels([])
     setIsPanelActive(false)
     setScreen('chat')
@@ -125,6 +128,7 @@ export default function App() {
           scenario: session.scenario,
           chat_type: session.chat_type,
         })
+        setInitialHistory(data.history || [])
         setPanels([])
         setIsPanelActive(false)
         setScreen('chat')
@@ -233,7 +237,7 @@ export default function App() {
           }}
         >← 목록</button>
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <ChatPanel sessionId={sessionId} persona={persona} onPanelStart={handlePanelStart} onPanel={handlePanel} onReset={handleReset} theme={activeTheme} themeSlot={themeSwitcher} />
+          <ChatPanel key={sessionId} sessionId={sessionId} persona={persona} initialHistory={initialHistory} onPanelStart={handlePanelStart} onPanel={handlePanel} onReset={handleReset} theme={activeTheme} themeSlot={themeSwitcher} />
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <PanelSection panels={panels} isActive={isPanelActive} theme={activeTheme} />

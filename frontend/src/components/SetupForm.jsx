@@ -26,6 +26,7 @@ export default function SetupForm({ onStart, theme }) {
   const [step, setStep] = useState(1)
   const [visible, setVisible] = useState(true)
   const [myInfo, setMyInfo] = useState({})
+  const [submitting, setSubmitting] = useState(false)
 
   const goNext = (e) => {
     e.preventDefault()
@@ -47,6 +48,7 @@ export default function SetupForm({ onStart, theme }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (submitting) return
     const merged = { ...myInfo, ...Object.fromEntries(new FormData(e.target)), chat_type: chatType }
     merged.age = Number(merged.age)
     // 로그인 토큰 포함
@@ -59,6 +61,7 @@ export default function SetupForm({ onStart, theme }) {
       return
     }
 
+    setSubmitting(true)
     try {
       const res = await fetch(`${API}/session`, {
         method: 'POST',
@@ -74,6 +77,8 @@ export default function SetupForm({ onStart, theme }) {
       onStart(data.session_id, form)
     } catch (err) {
       alert('서버 연결 실패! 백엔드가 켜져있는지 확인하세요.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -124,7 +129,7 @@ export default function SetupForm({ onStart, theme }) {
             </div>
 
             <button type="button" onClick={goBack} style={{ ...s.btn, background: '#333' }}>이전</button>
-            <button type="submit" style={s.btn}>시작</button>
+            <button type="submit" disabled={submitting} style={{ ...s.btn, opacity: submitting ? 0.6 : 1 }}>{submitting ? '생성 중...' : '시작'}</button>
           </form>
         </div>
       )}

@@ -83,7 +83,7 @@ assistant: 왜왜 뭔데, 뭐가 달라졌어?"""
         "fearful": "긴장된 표정 - 불안하거나 걱정되는 얼굴",
         "neutral": "담담한 표정 - 특별한 감정 없이 차분함",
     }
-    voice_emotion_map = {
+    voice_emotion_map_offline = {
         "ang": "목소리가 날카롭거나 거셈 - 화가 나있는 상태",
         "hap": "목소리가 밝고 활기참 - 기분이 좋은 상태",
         "neu": "목소리가 차분함 - 평온한 상태",
@@ -91,6 +91,15 @@ assistant: 왜왜 뭔데, 뭐가 달라졌어?"""
         "dis": "목소리에 불쾌감이 느껴짐",
         "fea": "목소리가 떨리거나 조심스러움 - 불안한 상태",
         "sur": "목소리에 놀람이 느껴짐",
+    }
+    voice_emotion_map_online = {
+        "ang": "말투가 날카롭고 퉁명스러움 - 화가 난 느낌",
+        "hap": "말투가 밝고 신남 - 기분 좋은 느낌",
+        "neu": "말투가 무덤덤함 - 평온한 느낌",
+        "sad": "말투가 힘없고 처져있음 - 우울한 느낌",
+        "dis": "말투에서 불쾌감이 느껴짐",
+        "fea": "말투가 조심스럽고 소극적임 - 불안한 느낌",
+        "sur": "말투에서 당황한 느낌이 남",
     }
 
     emotion_text = ""
@@ -104,7 +113,10 @@ assistant: 왜왜 뭔데, 뭐가 달라졌어?"""
         label = user_voice_emotion["label"]
         score = user_voice_emotion.get("score", 0)
         intensity = "아주 강하게" if score > 0.8 else "꽤" if score > 0.5 else "살짝"
-        lines.append(f"목소리(음성): {voice_emotion_map.get(label, label)} - {intensity} 느껴짐 ({score*100:.0f}%)")
+        if chat_type == "online":
+            lines.append(f"말투 느낌: {voice_emotion_map_online.get(label, label)} - {intensity} ({score*100:.0f}%)")
+        else:
+            lines.append(f"목소리(음성): {voice_emotion_map_offline.get(label, label)} - {intensity} 느껴짐 ({score*100:.0f}%)")
 
     if lines:
         emotion_text = f"""

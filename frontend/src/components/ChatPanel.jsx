@@ -24,8 +24,10 @@ const FIELDS = [
   { key: 'speech_style', label: '말투' },
 ]
 
-export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, onReset, theme, themeSlot }) {
-  const [messages, setMessages] = useState([])
+export default function ChatPanel({ sessionId, persona, initialHistory, onPanelStart, onPanel, onReset, theme, themeSlot }) {
+  const [messages, setMessages] = useState(
+    () => (initialHistory || []).map(m => ({ role: m.role, content: m.content }))
+  )
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [editMode, setEditMode] = useState(false)
