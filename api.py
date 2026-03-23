@@ -303,6 +303,8 @@ def chat(req: ChatRequest):
         # Redis에 대화 저장
         append_history(req.session_id, "user", req.message)
         append_history(req.session_id, "assistant", full_response)
+        session["history"].append({"role": "user", "content": req.message})
+        session["history"].append({"role": "assistant", "content": full_response})
 
         if should_summarize(req.session_id):
             run_summary_and_facts(client, req.session_id)

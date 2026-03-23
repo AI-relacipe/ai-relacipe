@@ -138,10 +138,11 @@ export default function App() {
 
   const handlePanelStart = () => setIsPanelActive(true)
 
-  const handlePanel = (data) => {
-    setPanels(prev => [...prev, data])
-    setIsPanelActive(false)
-  }
+ const handlePanel = (data) => {
+  setPanels(prev => [...prev, data])
+  setIsPanelActive(true)
+  setTimeout(() => setIsPanelActive(false), 2000)
+}
 
   const handleReset = (newSid, newPersona) => {
     setSessionId(newSid)
