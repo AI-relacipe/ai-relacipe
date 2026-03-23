@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import LoginPage from './components/LoginPage'
 import ChatList from './components/ChatList'
 import SetupForm from './components/SetupForm'
@@ -59,12 +60,11 @@ const sw = {
 }
 
 export default function App() {
+  const navigate = useNavigate()
+
   // 인증 상태
   const [token, setToken] = useState(localStorage.getItem('token') || null)
   const [username, setUsername] = useState(localStorage.getItem('username') || null)
-
-  // 화면 상태: 'landing' → 'login' → 'chatlist' → 'setup' → 'chat'
-  const [screen, setScreen] = useState('landing')
 
   // 채팅 상태
   const [sessionId, setSessionId] = useState(null)
@@ -74,17 +74,10 @@ export default function App() {
   const [isPanelActive, setIsPanelActive] = useState(false)
   const [activeTheme, setActiveTheme] = useState(defaultTheme)
 
-  // 토큰 있으면 자동 로그인
-  useEffect(() => {
-    if (token && username) {
-      setScreen('chatlist')
-    }
-  }, [])
-
   const handleLogin = (newToken, newUsername) => {
     setToken(newToken)
     setUsername(newUsername)
-    setScreen('chatlist')
+    navigate('/chatlist')
   }
 
   const handleLogout = () => {
@@ -95,7 +88,7 @@ export default function App() {
     setSessionId(null)
     setPersona(null)
     setPanels([])
-    setScreen('login')
+    navigate('/login')
   }
 
   const handleNewChat = () => {
@@ -104,7 +97,7 @@ export default function App() {
     setInitialHistory([])
     setPanels([])
     setIsPanelActive(false)
-    setScreen('setup')
+    navigate('/setup')
   }
 
   const handleStart = (sid, form) => {
@@ -113,11 +106,10 @@ export default function App() {
     setInitialHistory([])
     setPanels([])
     setIsPanelActive(false)
-    setScreen('chat')
+    navigate('/chat')
   }
 
   const handleSelectSession = async (session) => {
-    // 대화 이어하기
     try {
       const res = await fetch(`${API}/session/${session.session_id}/resume?token=${token}`)
       if (res.ok) {
@@ -127,26 +119,27 @@ export default function App() {
           ...data.persona,
           scenario: session.scenario,
           chat_type: session.chat_type,
+          profileImage: data.profile_image || null,
         })
         setInitialHistory(data.history || [])
         setPanels([])
         setIsPanelActive(false)
-        setScreen('chat')
+        navigate('/chat')
       } else {
         alert('세션을 불러올 수 없습니다.')
       }
-    } catch (err) {
+    } catch {
       alert('서버 연결에 실패했습니다.')
     }
   }
 
   const handlePanelStart = () => setIsPanelActive(true)
 
- const handlePanel = (data) => {
-  setPanels(prev => [...prev, data])
-  setIsPanelActive(true)
-  setTimeout(() => setIsPanelActive(false), 2000)
-}
+  const handlePanel = (data) => {
+    setPanels(prev => [...prev, data])
+    setIsPanelActive(true)
+    setTimeout(() => setIsPanelActive(false), 2000)
+  }
 
   const handleReset = (newSid, newPersona) => {
     setSessionId(newSid)
@@ -159,90 +152,113 @@ export default function App() {
     setSessionId(null)
     setPersona(null)
     setPanels([])
-    setScreen('chatlist')
+    navigate('/chatlist')
   }
 
   const themeSwitcher = <ThemeSwitcher activeTheme={activeTheme} onChange={setActiveTheme} />
 
-  // ── 랜딩 페이지 ──
-  if (screen === 'landing') {
-    return <LandingPage onEnter={() => setScreen(token ? 'chatlist' : 'login')} />
-  }
-
-  // ── 로그인 ──
-  if (screen === 'login') {
-    return (
-      <>
-        <LoginPage onLogin={handleLogin} theme={activeTheme} />
-        <div style={{ position: 'fixed', bottom: 20, left: 20, width: 160 }}>
-          {themeSwitcher}
-        </div>
-      </>
-    )
-  }
-
-  // ── 대화 목록 ──
-  if (screen === 'chatlist') {
-    return (
-      <>
-        <ChatList
-          token={token}
-          username={username}
-          onSelectSession={handleSelectSession}
-          onNewChat={handleNewChat}
-          onLogout={handleLogout}
-          theme={activeTheme}
-        />
-        <div style={{ position: 'fixed', bottom: 20, left: 20, width: 160 }}>
-          {themeSwitcher}
-        </div>
-      </>
-    )
-  }
-
-  // ── 캐릭터 설정 ──
-  if (screen === 'setup') {
-    return (
-      <>
-        <SetupForm onStart={handleStart} theme={activeTheme} />
-        <div style={{ position: 'fixed', bottom: 20, left: 20, width: 160 }}>
-          {themeSwitcher}
-        </div>
-        <button
-          onClick={handleBackToList}
-          style={{
-            position: 'fixed', top: 20, left: 20,
-            padding: '8px 16px', borderRadius: 8,
-            background: activeTheme.bgPanel, color: activeTheme.textMuted,
-            border: `1px solid ${activeTheme.border}`, cursor: 'pointer',
-            fontSize: 13, fontWeight: 600,
-          }}
-        >← 대화 목록</button>
-      </>
-    )
-  }
-
-  // ── 채팅 ──
   return (
-    <div style={{ height: '100vh', width: '100vw', background: activeTheme.bgBase, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: '95%', height: '95%', display: 'flex', overflow: 'hidden', borderRadius: 16, border: `1px solid ${activeTheme.border}`, position: 'relative' }}>
-        <button
-          onClick={handleBackToList}
-          style={{
-            position: 'absolute', top: 8, left: 8, zIndex: 10,
-            width: 184, padding: '6px 0', borderRadius: 6, textAlign: 'center',
-            background: activeTheme.bgPanel, color: activeTheme.textMuted,
-            border: `1px solid ${activeTheme.border}`, cursor: 'pointer',
-            fontSize: 13, fontWeight: 700,
-          }}
-        >← 목록</button>
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <ChatPanel key={sessionId} sessionId={sessionId} persona={persona} initialHistory={initialHistory} onPanelStart={handlePanelStart} onPanel={handlePanel} onReset={handleReset} theme={activeTheme} themeSlot={themeSwitcher} />
-        </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <PanelSection panels={panels} isActive={isPanelActive} theme={activeTheme} />
-        </div>
-      </div>
-    </div>
+    <Routes>
+      {/* 랜딩 */}
+      <Route
+        path="/"
+        element={<LandingPage onEnter={() => navigate(token ? '/chatlist' : '/login')} />}
+      />
+
+      {/* 로그인 */}
+      <Route
+        path="/login"
+        element={
+          token ? <Navigate to="/chatlist" replace /> : (
+            <>
+              <LoginPage onLogin={handleLogin} theme={activeTheme} />
+              <div style={{ position: 'fixed', bottom: 20, left: 20, width: 160 }}>
+                {themeSwitcher}
+              </div>
+            </>
+          )
+        }
+      />
+
+      {/* 대화 목록 */}
+      <Route
+        path="/chatlist"
+        element={
+          !token ? <Navigate to="/login" replace /> : (
+            <>
+              <ChatList
+                token={token}
+                username={username}
+                onSelectSession={handleSelectSession}
+                onNewChat={handleNewChat}
+                onLogout={handleLogout}
+                theme={activeTheme}
+              />
+              <div style={{ position: 'fixed', bottom: 20, left: 20, width: 160 }}>
+                {themeSwitcher}
+              </div>
+            </>
+          )
+        }
+      />
+
+      {/* 캐릭터 설정 */}
+      <Route
+        path="/setup"
+        element={
+          !token ? <Navigate to="/login" replace /> : (
+            <>
+              <SetupForm onStart={handleStart} theme={activeTheme} />
+              <div style={{ position: 'fixed', bottom: 20, left: 20, width: 160 }}>
+                {themeSwitcher}
+              </div>
+              <button
+                onClick={handleBackToList}
+                style={{
+                  position: 'fixed', top: 20, left: 20,
+                  padding: '8px 16px', borderRadius: 8,
+                  background: activeTheme.bgPanel, color: activeTheme.textMuted,
+                  border: `1px solid ${activeTheme.border}`, cursor: 'pointer',
+                  fontSize: 13, fontWeight: 600,
+                }}
+              >← 대화 목록</button>
+            </>
+          )
+        }
+      />
+
+      {/* 채팅 */}
+      <Route
+        path="/chat"
+        element={
+          !token ? <Navigate to="/login" replace /> :
+          !sessionId ? <Navigate to="/chatlist" replace /> : (
+            <div style={{ height: '100vh', width: '100vw', background: activeTheme.bgBase, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: '95%', height: '95%', display: 'flex', overflow: 'hidden', borderRadius: 16, border: `1px solid ${activeTheme.border}`, position: 'relative' }}>
+                <button
+                  onClick={handleBackToList}
+                  style={{
+                    position: 'absolute', top: 8, left: 8, zIndex: 10,
+                    width: 184, padding: '6px 0', borderRadius: 6, textAlign: 'center',
+                    background: activeTheme.bgPanel, color: activeTheme.textMuted,
+                    border: `1px solid ${activeTheme.border}`, cursor: 'pointer',
+                    fontSize: 13, fontWeight: 700,
+                  }}
+                >← 목록</button>
+                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                  <ChatPanel key={sessionId} sessionId={sessionId} persona={persona} initialHistory={initialHistory} onPanelStart={handlePanelStart} onPanel={handlePanel} onReset={handleReset} theme={activeTheme} themeSlot={themeSwitcher} />
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <PanelSection panels={panels} isActive={isPanelActive} theme={activeTheme} />
+                </div>
+              </div>
+            </div>
+          )
+        }
+      />
+
+      {/* 없는 경로 → 랜딩으로 */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }

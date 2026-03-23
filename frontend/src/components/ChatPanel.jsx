@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import * as faceapi from 'face-api.js'
+import { getDominantColor } from '../utils/colorUtils'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const VOICE_API = import.meta.env.VITE_VOICE_API_URL || 'http://localhost:8001'
@@ -32,6 +34,11 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
   const [isTyping, setIsTyping] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [draft, setDraft] = useState(persona)
+  const [profileImage, setProfileImage] = useState(persona.profileImage || null)
+  const [profileBgColor, setProfileBgColor] = useState(() => localStorage.getItem('profile_bg_color') || null)
+  const [uploading, setUploading] = useState(false)
+  const [profileModal, setProfileModal] = useState(false)
+  const fileInputRef = useRef(null)
   const [cameraOn, setCameraOn] = useState(false)
   const [emotion, setEmotion] = useState(null)
   const [modelsLoaded, setModelsLoaded] = useState(false)
@@ -216,6 +223,31 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
 
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
 
+  const handleProfileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const token = localStorage.getItem('token')
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('session_id', sessionId)
+    formData.append('token', token)
+    setUploading(true)
+    try {
+      const res = await fetch(API + '/upload/profile', { method: 'POST', body: formData })
+      if (!res.ok) { alert('업로드 실패'); return }
+      const data = await res.json()
+      setProfileImage(data.image_url)
+      getDominantColor(API + data.image_url).then(color => {
+        if (color) { setProfileBgColor(color); localStorage.setItem('profile_bg_color', color) }
+      })
+    } catch {
+      alert('업로드 중 오류가 발생했습니다.')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
   const handleSaveEdit = async () => {
     const res = await fetch(API + '/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) })
     if (!res.ok) { alert('저장 실패'); return }
@@ -229,7 +261,18 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
   return (
     <div style={s.wrap}>
       <div style={s.sidebar}>
-        <div style={s.avatarBtn} onClick={() => { setEditMode(v => !v); setDraft({...persona}) }}>{persona.name[0]}</div>
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleProfileUpload} />
+        <div
+          style={{ ...s.avatarBtn, backgroundColor: profileBgColor || theme.accent, backgroundImage: profileImage ? `url(${API}${profileImage})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }}
+          onClick={() => {
+            if (profileImage) { setProfileModal(true) }
+            else if (editMode) { fileInputRef.current?.click() }
+            else { setEditMode(true); setDraft({...persona}) }
+          }}
+          title={profileImage ? '클릭하여 이미지 관리' : editMode ? '클릭하여 프로필 사진 변경' : '클릭하여 정보 수정'}
+        >
+          {uploading ? <span style={{ fontSize: 12 }}>...</span> : !profileImage && persona.name[0]}
+        </div>
         {editMode ? (
           <>
             <span style={s.sideLabel}>수정</span>
@@ -249,6 +292,24 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
         )}
         <div style={{marginTop:'auto',paddingTop:12}}>{themeSlot}</div>
       </div>
+
+      {/* 프로필 이미지 모달 */}
+      {profileModal && createPortal(
+        <div style={s.modalOverlay} onClick={() => setProfileModal(false)}>
+          <div style={s.modalBox} onClick={e => e.stopPropagation()}>
+            <div style={s.modalPreview}>
+              <img src={`${API}${profileImage}`} alt="프로필" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }} />
+            </div>
+            <div style={s.modalBtns}>
+              <button style={s.modalBtnChange} onClick={() => { setProfileModal(false); fileInputRef.current?.click() }}>이미지 변경</button>
+              <button style={s.modalBtnRemove} onClick={() => { setProfileImage(null); setProfileBgColor(null); localStorage.removeItem('profile_bg_color'); setProfileModal(false) }}>이미지 제거</button>
+              <button style={s.modalBtnClose} onClick={() => setProfileModal(false)}>닫기</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       <div style={s.chatColumn}>
         <div style={s.scenarioBar}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -270,7 +331,9 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
                 return (
                   <div key={msgIndex} style={{ ...s.msgRow, justifyContent: 'flex-start' }}>
                     {showAvatar
-                      ? <div style={s.avatar}>{persona.name[0]}</div>
+                      ? <div style={{ ...s.avatar, backgroundColor: profileBgColor || theme.accent, backgroundImage: profileImage ? `url(${API}${profileImage})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+                          {!profileImage && persona.name[0]}
+                        </div>
                       : <div style={{ width: 32, flexShrink: 0 }} />
                     }
                     <div style={s.bubbleAI}>
@@ -315,7 +378,7 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
 const makeStyles=(t)=>({
   wrap:{display:'flex',flexDirection:'row',height:'100%',width:'100%',overflow:'hidden'},
   sidebar:{width:200,flexShrink:0,background:t.bgBase,borderRight:'1px solid '+t.border,display:'flex',flexDirection:'column',gap:10,padding:'56px 16px 16px',overflowY:'auto'},
-  avatarBtn:{width:56,height:56,borderRadius:'50%',background:t.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:700,color:'#fff',cursor:'pointer',alignSelf:'center',marginBottom:16,flexShrink:0},
+  avatarBtn:{width:56,height:56,borderRadius:'50%',backgroundColor:t.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,fontWeight:700,color:'#fff',cursor:'pointer',alignSelf:'center',marginBottom:16,flexShrink:0},
   sideLabel:{fontSize:12,color:t.textMuted,fontWeight:600},
   fieldRow:{display:'flex',flexDirection:'column',gap:2},fieldKey:{fontSize:11,color:t.textMuted},fieldVal:{fontSize:14,color:t.textMain,wordBreak:'break-all'},
   editInput:{padding:'3px 6px',borderRadius:4,border:'1px solid '+t.border,background:t.bgInput,color:t.textMain,fontSize:13,outline:'none',width:'100%'},
@@ -329,7 +392,7 @@ const makeStyles=(t)=>({
   watermark:{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',fontSize:22,color:t.border,fontWeight:700,pointerEvents:'none'},
   messagesInner:{width:'100%',maxWidth:520,display:'flex',flexDirection:'column',gap:10},
   msgRow:{display:'flex',alignItems:'flex-end',gap:8},
-  avatar:{width:32,height:32,borderRadius:'50%',background:t.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,flexShrink:0,color:'#fff'},
+  avatar:{width:32,height:32,borderRadius:'50%',backgroundColor:t.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,flexShrink:0,color:'#fff'},
   bubbleUser:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 4px 18px',background:'#fee500',color:'#000',fontSize:14,lineHeight:1.5},
   bubbleAI:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 18px 4px',background:lighten(t.bgPanel),color:t.textMain,fontSize:14,lineHeight:1.5},
   typing:{fontSize:18,letterSpacing:3,color:t.textMuted},
@@ -343,4 +406,11 @@ const makeStyles=(t)=>({
   cameraBtn:{padding:'10px 14px',borderRadius:20,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,whiteSpace:'nowrap',transition:'all 0.2s'},
   input:{flex:1,padding:'10px 14px',borderRadius:20,border:'1px solid '+t.border,background:t.bgInput,color:t.textMain,fontSize:14,outline:'none'},
   sendBtn:{padding:'10px 20px',borderRadius:20,background:t.primary,color:'#fff',border:'none',cursor:'pointer',fontSize:14,fontWeight:600},
+  modalOverlay:{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center'},
+  modalBox:{background:t.bgPanel,border:'1px solid '+t.border,borderRadius:16,padding:24,display:'flex',flexDirection:'column',alignItems:'center',gap:16,minWidth:240},
+  modalPreview:{width:160,height:160,borderRadius:12,overflow:'hidden',border:'1px solid '+t.border},
+  modalBtns:{display:'flex',flexDirection:'column',gap:8,width:'100%'},
+  modalBtnChange:{width:'100%',padding:'10px 0',borderRadius:8,border:'none',background:t.primary,color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer'},
+  modalBtnRemove:{width:'100%',padding:'10px 0',borderRadius:8,border:'1px solid rgba(220,60,60,0.5)',background:'transparent',color:'#ff6666',fontWeight:700,fontSize:14,cursor:'pointer'},
+  modalBtnClose:{width:'100%',padding:'10px 0',borderRadius:8,border:'1px solid '+t.border,background:'transparent',color:t.textMuted,fontWeight:600,fontSize:14,cursor:'pointer'},
 })
