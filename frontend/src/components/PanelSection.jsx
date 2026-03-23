@@ -1,7 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export default function PanelSection({ panels, isActive, theme }) {
   const bottomRef = useRef(null)
+  const [blink, setBlink] = useState(false)
+
+  useEffect(() => {
+  if (!isActive) return
+  const t = setInterval(() => setBlink(v => !v), 800)
+  return () => clearInterval(t)
+}, [isActive])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -14,8 +21,25 @@ export default function PanelSection({ panels, isActive, theme }) {
 
       {/* 상단 상태 바 */}
       <div style={s.statusBar}>
-        <span style={{ ...s.dot, background: isActive ? '#4ade80' : '#555', boxShadow: isActive ? '0 0 8px #4ade80' : 'none' }} />
-        <span style={s.statusText}>대화중</span>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          background: isActive ? 'rgba(220,20,20,0.12)' : 'rgba(100,100,100,0.1)',
+          border: isActive ? '1px solid rgba(220,20,20,0.35)' : '1px solid rgba(100,100,100,0.25)',
+          borderRadius: 100, padding: '6px 16px',
+          transition: 'all 0.3s',
+        }}>
+          <span style={{
+            ...s.dot,
+            background: isActive ? '#ff5555' : '#555',
+            boxShadow: isActive ? '0 0 6px #ff5555' : 'none',
+            opacity: isActive ? (blink ? 1 : 0.15) : 1,
+            transition: 'opacity 0.3s',
+          }} />
+          <span style={{
+            fontSize: 12, fontWeight: 800, letterSpacing: '0.15em',
+            color: isActive ? '#ff5555' : '#888',
+          }}>ON AIR</span>
+        </div>
       </div>
 
       {/* 대화 영역 (전체 확장) */}
@@ -70,15 +94,12 @@ const makeStyles = (t) => ({
     display: 'flex', flexDirection: 'column', height: '100%',
     background: t.bgBase, borderLeft: `2px solid ${t.border}`,
   },
-
   statusBar: {
     display: 'flex', alignItems: 'center', gap: 8,
     padding: '10px 20px', borderBottom: `2px solid ${t.border}`,
     background: t.bgBase, flexShrink: 0,
   },
   dot: { width: 12, height: 12, borderRadius: '50%', transition: 'all 0.3s' },
-  statusText: { fontSize: 14, color: t.textMain, fontWeight: 600 },
-
   bubbleSection: {
     flex: 1, display: 'flex', flexDirection: 'column',
     padding: '20px', minHeight: 0,
