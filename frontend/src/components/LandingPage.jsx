@@ -281,7 +281,7 @@ export default function LandingPage({ onEnter }) {
           <span style={s.logoIcon}>📺</span>
           <span style={s.logoText}>ai-relacipe</span>
         </div>
-        <button style={s.navBtn} onClick={onEnter}>대화 시작하기</button>
+        <button style={s.navBtn} onClick={onEnter}>회원가입</button>
       </nav>
 
       {/* ── 섹션 1: 히어로 ── */}
@@ -308,7 +308,7 @@ export default function LandingPage({ onEnter }) {
           onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = `0 0 36px ${COLORS.primary}99` }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = `0 0 20px ${COLORS.primary}55` }}
         >
-          🎙 지금 대화 시작하기
+          🎙 지금 시작하기
         </button>
 
         <div style={s.broadcastBar}>
@@ -354,13 +354,6 @@ export default function LandingPage({ onEnter }) {
         <h2 style={s.sectionTitle}>당신의 연애를 지켜보는 패널들</h2>
         <p style={s.sectionDesc}>혼자 고민하지 마세요 T패널과 F패널이 정반대 시각으로 당신 연애를 분석합니다</p>
         <div style={s.panelCardsWrap}>
-          {/* <PanelCard
-            icon="🎙"
-            role="MC"
-            name="메인 MC"
-            desc={`상황을 정리하고 패널들을 이끄는\n진행자. 결정적인 순간을 놓치지 않아요`}
-            color={COLORS.neon}
-          /> */}
           <PanelCard
             icon="🧠"
             role="T 패널"
@@ -395,7 +388,7 @@ export default function LandingPage({ onEnter }) {
           onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.boxShadow = `0 0 36px ${COLORS.primary}99` }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = `0 0 20px ${COLORS.primary}55` }}
         >
-          🎙 대화 시작하기
+          🎙 회원가입하고 시작하기
         </button>
       </section>
 
@@ -449,10 +442,11 @@ const s = {
   },
   navBtn: {
     padding: '8px 20px', fontSize: 14, fontWeight: 600,
-    color: COLORS.textMain,
-    background: 'transparent',
-    border: `1px solid ${COLORS.border}`,
+    color: '#fff',
+    background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.accent})`,
+    border: 'none',
     borderRadius: 100, cursor: 'pointer',
+    transition: 'opacity 0.2s',
   },
   hero: {
     display: 'flex', flexDirection: 'column',

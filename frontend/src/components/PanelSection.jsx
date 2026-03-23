@@ -18,7 +18,7 @@ export default function PanelSection({ panels, isActive, theme }) {
         <span style={s.statusText}>대화중</span>
       </div>
 
-      {/* 말풍선 영역 */}
+      {/* 대화 영역 (전체 확장) */}
       <div style={s.bubbleSection}>
         <div style={s.bubbleBox}>
           <div style={s.bubbleTitle}>패널들의 대화창</div>
@@ -36,17 +36,6 @@ export default function PanelSection({ panels, isActive, theme }) {
             <div ref={bottomRef} />
           </div>
         </div>
-        {/* 말풍선 꼬리 */}
-        <div style={s.bubbleTail} />
-      </div>
-
-      {/* 캐릭터 삽입 영역 */}
-      <div style={s.charSection}>
-        <div style={s.charTitle}>캐릭터 삽입 영역</div>
-        <div style={s.charBoxRow}>
-          <div style={s.charBox} />
-          <div style={s.charBox} />
-        </div>
       </div>
 
     </div>
@@ -58,9 +47,9 @@ function PanelBubble({ label, color, text, theme, side = 'left' }) {
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexDirection: isRight ? 'row-reverse' : 'row' }}>
       <div style={{
-        width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+        width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 13, fontWeight: 700, color: '#fff', background: color,
+        fontSize: 14, fontWeight: 700, color: '#fff', background: color,
       }}>{label}</div>
       <div style={{
         flex: 1, padding: '10px 14px',
@@ -92,7 +81,7 @@ const makeStyles = (t) => ({
 
   bubbleSection: {
     flex: 1, display: 'flex', flexDirection: 'column',
-    padding: '20px 20px 0 20px', minHeight: 0,
+    padding: '20px', minHeight: 0,
   },
   bubbleBox: {
     flex: 1, border: `2px solid ${t.border}`, borderRadius: 16,
@@ -109,26 +98,4 @@ const makeStyles = (t) => ({
   },
   placeholder: { color: t.textMuted, fontSize: 14, textAlign: 'center', marginTop: 20 },
   panelGroup: { display: 'flex', flexDirection: 'column', gap: 10 },
-
-  bubbleTail: {
-    width: 0, height: 0, alignSelf: 'center',
-    borderLeft: '16px solid transparent',
-    borderRight: '16px solid transparent',
-    borderTop: `18px solid ${t.border}`,
-    flexShrink: 0,
-  },
-
-  charSection: {
-    flexShrink: 0, padding: '16px 20px 20px 20px',
-    borderTop: `2px solid ${t.border}`, background: t.bgBase,
-  },
-  charTitle: {
-    fontSize: 16, fontWeight: 700, color: t.textMain,
-    textAlign: 'center', marginBottom: 12,
-  },
-  charBoxRow: { display: 'flex', gap: 16, justifyContent: 'center' },
-  charBox: {
-    width: 140, height: 100, border: `2px solid ${t.border}`,
-    borderRadius: 8, background: t.bgPanel,
-  },
 })
