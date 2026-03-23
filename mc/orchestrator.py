@@ -168,7 +168,8 @@ def _call_f_panel(client, mc_brief, summary, facts, context, t_response, dialogu
     )
 
 
-def run_mc_panel(client, session_id, trigger_context, persona_name="연인", user_name="사용자"):
+def run_mc_panel(client, session_id, trigger_context, persona_name="연인", user_name="사용자",
+                 user_camera_emotion=None, user_voice_emotion=None):
     """
     MC Agent: 상황 판단 후 T/F 패널을 동적으로 호출
     반환: {"mc": ..., "t_panel": ..., "f_panel": ...}
@@ -188,10 +189,19 @@ def run_mc_panel(client, session_id, trigger_context, persona_name="연인", use
         [f"{'사용자' if m['role'] == 'user' else '연인'}: {m['content']}" for m in recent_history]
     ) if recent_history else "대화 없음"
 
+    emotion_lines = []
+    if user_camera_emotion and user_camera_emotion.get("label"):
+        emotion_lines.append(f"표정: {user_camera_emotion['label']} ({user_camera_emotion.get('score', 0)*100:.0f}%)")
+    if user_voice_emotion and user_voice_emotion.get("label"):
+        emotion_lines.append(f"목소리: {user_voice_emotion['label']} ({user_voice_emotion.get('score', 0)*100:.0f}%)")
+
     full_context = (
         f"[참여자 이름]\n연인: {persona_name}\n사용자: {user_name}\n\n"
         f"[최근 대화 흐름]\n{recent_chat}\n\n[트리거 상황]\n{trigger_context}"
     )
+    if emotion_lines:
+        full_context += "\n\n[사용자 현재 감정 (카메라/음성 인식)]\n" + "\n".join(emotion_lines)
+        print(f"[패널+감정] {', '.join(emotion_lines)}", flush=True)
 
     system_prompt = MC_AGENT_PROMPT.format(
         summary=summary_text,
