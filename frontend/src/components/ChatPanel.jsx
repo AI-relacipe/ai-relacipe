@@ -24,8 +24,10 @@ const FIELDS = [
   { key: 'speech_style', label: '말투' },
 ]
 
-export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, onReset, theme, themeSlot }) {
-  const [messages, setMessages] = useState([])
+export default function ChatPanel({ sessionId, persona, initialHistory, onPanelStart, onPanel, onReset, theme, themeSlot }) {
+  const [messages, setMessages] = useState(
+    () => (initialHistory || []).map(m => ({ role: m.role, content: m.content }))
+  )
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -42,6 +44,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
   const audioChunksRef = useRef([])
   const queueRef = useRef([])
   const processingRef = useRef(false)
+  const debounceTimerRef = useRef(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isTyping])
 
@@ -117,7 +120,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     setIsRecording(false)
   }
 
-  const callAPI = async (text, resolvedEmotion) => {
+  const callAPI = async (text, resolvedEmotion, rapidFollowup = false) => {
     let fullText = ''
     let pendingPanelStart = false
     let pendingPanel = null
@@ -126,6 +129,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
       const body = { session_id: sessionId, message: text }
       if (resolvedEmotion) body.voice_emotion = resolvedEmotion
       if (emotion && cameraOn) body.camera_emotion = emotion
+      if (rapidFollowup) body.rapid_followup = true
       const res = await fetch(API + '/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -159,7 +163,7 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
                 const parts = fullText.split('\n').filter(p => p.trim())
                 for (const part of parts) {
                   setMessages(prev => [...prev, { role: 'assistant', content: part }])
-                  await new Promise(r => setTimeout(r, Math.min(part.length * 200, 2000)))
+                  await new Promise(r => setTimeout(r, Math.min(part.length * 250, 2500)))
                 }
               } else {
                 // 오프라인: 스트리밍 버블 확정
@@ -195,8 +199,12 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     processingRef.current = true
     setIsTyping(true)
     while (queueRef.current.length > 0) {
-      const { text, resolvedEmotion } = queueRef.current.shift()
-      await callAPI(text, resolvedEmotion)
+      const batch = []
+      while (queueRef.current.length > 0) batch.push(queueRef.current.shift())
+      const combinedText = batch.map(b => b.text).join('\n')
+      const resolvedEmotion = batch[batch.length - 1]?.resolvedEmotion
+      const rapidFollowup = batch.some(b => b.rapidFollowup)
+      await callAPI(combinedText, resolvedEmotion, rapidFollowup)
     }
     processingRef.current = false
     setIsTyping(false)
@@ -208,8 +216,18 @@ export default function ChatPanel({ sessionId, persona, onPanelStart, onPanel, o
     setInput('')
     setTimeout(() => setInput(''), 0)
     setMessages(prev => [...prev, { role: 'user', content: text }])
-    queueRef.current.push({ text, resolvedEmotion })
-    processQueue()
+    // LLM이 이미 응답 중이면 즉시 큐에 넣고 rapid_followup 처리
+    if (processingRef.current) {
+      queueRef.current.push({ text, resolvedEmotion, rapidFollowup: true })
+      return
+    }
+    // 아직 처리 안 했으면 debounce: 마지막 메시지 후 800ms 침묵 시 전송
+    queueRef.current.push({ text, resolvedEmotion, rapidFollowup: false })
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null
+      processQueue()
+    }, 1200)
   }
 
   const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }
