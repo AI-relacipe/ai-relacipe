@@ -97,7 +97,12 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
 
   const toggleCamera = useCallback(() => { cameraOn ? stopCamera() : startCamera() }, [cameraOn])
 
-  useEffect(() => { return () => { stopCamera() } }, [])
+  useEffect(() => {
+    return () => {
+      stopCamera()
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    }
+  }, [])
 
   const startRecording = async () => {
     try {
@@ -195,7 +200,10 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
       }
       if (pendingPanel) onPanel(pendingPanel)
     } catch (e) {
-      if (e.name === 'AbortError') return  // 채팅방 이동으로 인한 취소 - 무시
+      if (e.name === 'AbortError') {
+        setIsTyping(false)
+        return
+      }
       throw e
     } finally {
       // stream_done 못 받은 경우 스트리밍 버블 강제 확정
@@ -211,16 +219,21 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
     if (processingRef.current) return
     processingRef.current = true
     setIsTyping(true)
-    while (queueRef.current.length > 0) {
-      const batch = []
-      while (queueRef.current.length > 0) batch.push(queueRef.current.shift())
-      const combinedText = batch.map(b => b.text).join('\n')
-      const resolvedEmotion = batch[batch.length - 1]?.resolvedEmotion
-      const rapidFollowup = batch.some(b => b.rapidFollowup)
-      await callAPI(combinedText, resolvedEmotion, rapidFollowup)
+    try {
+      while (queueRef.current.length > 0) {
+        const batch = []
+        while (queueRef.current.length > 0) batch.push(queueRef.current.shift())
+        const combinedText = batch.map(b => b.text).join('\n')
+        const resolvedEmotion = batch[batch.length - 1]?.resolvedEmotion
+        const rapidFollowup = batch.some(b => b.rapidFollowup)
+        await callAPI(combinedText, resolvedEmotion, rapidFollowup)
+      }
+    } catch (e) {
+      console.error('메시지 처리 오류:', e)
+    } finally {
+      processingRef.current = false
+      setIsTyping(false)
     }
-    processingRef.current = false
-    setIsTyping(false)
   }
 
   const sendMessage = (overrideText, resolvedEmotion) => {
@@ -236,6 +249,7 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
     }
     // 아직 처리 안 했으면 debounce: 마지막 메시지 후 800ms 침묵 시 전송
     queueRef.current.push({ text, resolvedEmotion, rapidFollowup: false })
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
     debounceTimerRef.current = setTimeout(() => {
       debounceTimerRef.current = null
@@ -261,7 +275,7 @@ export default function ChatPanel({ sessionId, persona, initialHistory, onPanelS
       setProfileImage(data.image_url)
       getDominantColor(API + data.image_url).then(color => {
         if (color) { setProfileBgColor(color); localStorage.setItem('profile_bg_color', color) }
-      })
+      }).catch(() => {})
     } catch {
       alert('업로드 중 오류가 발생했습니다.')
     } finally {
@@ -415,7 +429,7 @@ const makeStyles=(t)=>({
   messagesInner:{width:'100%',maxWidth:520,display:'flex',flexDirection:'column',gap:10},
   msgRow:{display:'flex',alignItems:'flex-end',gap:8},
   avatar:{width:32,height:32,borderRadius:'50%',backgroundColor:t.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,flexShrink:0,color:'#fff'},
-  bubbleUser:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 4px 18px',background:'#fee500',color:'#000',fontSize:14,lineHeight:1.5},
+  bubbleUser:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 4px 18px',background:t.bgBubbleUser||t.primary,color:'#000',fontSize:14,lineHeight:1.5},
   bubbleAI:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 18px 4px',background:lighten(t.bgPanel),color:t.textMain,fontSize:14,lineHeight:1.5},
   typing:{fontSize:18,letterSpacing:3,color:t.textMuted},
   cursor:{animation:'blink 0.8s step-end infinite',marginLeft:2,color:t.textMuted},
