@@ -429,7 +429,7 @@ const makeStyles=(t)=>({
   messagesInner:{width:'100%',maxWidth:520,display:'flex',flexDirection:'column',gap:10},
   msgRow:{display:'flex',alignItems:'flex-end',gap:8},
   avatar:{width:32,height:32,borderRadius:'50%',backgroundColor:t.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,flexShrink:0,color:'#fff'},
-  bubbleUser:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 4px 18px',background:t.bgBubbleUser||t.primary,color:t.textBubbleUser||'#fff',fontSize:14,lineHeight:1.5},
+  bubbleUser:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 4px 18px',background:t.bgBubbleUser||t.primary,color:'#000',fontSize:14,lineHeight:1.5},
   bubbleAI:{maxWidth:'70%',padding:'10px 14px',borderRadius:'18px 18px 18px 4px',background:lighten(t.bgPanel),color:t.textMain,fontSize:14,lineHeight:1.5},
   typing:{fontSize:18,letterSpacing:3,color:t.textMuted},
   cursor:{animation:'blink 0.8s step-end infinite',marginLeft:2,color:t.textMuted},
