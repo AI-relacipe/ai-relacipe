@@ -4,15 +4,21 @@ MySQL 연결 + ORM 모델
 - chat_sessions: 대화방 목록
 """
 import os
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "mysql+pymysql://root:root1234@localhost:3306/relacipe"
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
 )
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, sessionmaker
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(bind=engine)
@@ -42,9 +48,32 @@ class ChatSession(Base):
     persona_json = Column(Text)  # 전체 페르소나 JSON 저장
     profile_image = Column(String(500), nullable=True)  # 프로필 이미지 URL
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="sessions")
+    messages = relationship("ChatMessage", back_populates="session", order_by="ChatMessage.id")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(20), ForeignKey("chat_sessions.session_id"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)   # "user" or "assistant"
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("ChatSession", back_populates="messages")
+
+
+class ChatPanel(Base):
+    __tablename__ = "chat_panels"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(20), ForeignKey("chat_sessions.session_id"), nullable=False, index=True)
+    t_text = Column(Text, nullable=False)
+    f_text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db():

@@ -1,38 +1,106 @@
+from config import LLM_MODEL
 import json
-import uuid
 import os
 import sys
 import threading
+import uuid
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 def _log(msg):
     print(msg, flush=True)
 
-from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form
+from typing import Optional
+
+import anthropic
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional
-import anthropic
-from dotenv import load_dotenv
 
 load_dotenv()
 
-from llm.lover import chat_stream_gen
-from llm.detector import detect_trigger
-from db.redis_client import (
-    save_meta, get_meta, append_history, get_history,
-    save_state, delete_session as redis_delete_session,
-)
-from mc.orchestrator import should_summarize, run_summary_and_facts, build_llm_context, run_mc_panel
-from llm.panel import run_intro_panel
-from auth import router as auth_router, verify_token
-from db.mysql_client import init_db, get_db, ChatSession, User
 from sqlalchemy.orm import Session
 
+from auth import router as auth_router
+from auth import verify_token
+from db.mysql_client import (
+    ChatMessage,
+    ChatSession,
+    SessionLocal,
+    get_db,
+    init_db,
+)
+from db.mysql_client import ChatPanel as ChatPanelModel
+from db.redis_client import (
+    append_history,
+    append_panel_pair,
+    get_history,
+    get_meta,
+    get_panel_pairs,
+    save_meta,
+    save_state,
+)
+from db.redis_client import (
+    delete_session as redis_delete_session,
+)
+from llm.detector import detect_trigger
+from llm.lover import chat_stream_gen
+from llm.panel import run_intro_panel
+from mc.orchestrator import (
+    build_llm_context,
+    run_mc_panel,
+    run_summary_and_facts,
+    should_summarize,
+)
+
 app = FastAPI()
+
+
+def _db_save_messages(session_id: str, role: str, content: str, split_newline: bool = False):
+    """MySQL에 메시지 저장. split_newline=True면 \n 기준으로 row 분리."""
+    try:
+        db = SessionLocal()
+        try:
+            parts = [p for p in content.split('\n') if p.strip()] if split_newline else [content]
+            for part in parts:
+                db.add(ChatMessage(session_id=session_id, role=role, content=part))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        _log(f"[DB] 메시지 저장 실패 ({role}): {repr(e)}")
+
+
+def _db_save_panel(session_id: str, t_text: str, f_text: str):
+    """MySQL에 패널 저장."""
+    try:
+        db = SessionLocal()
+        try:
+            db.add(ChatPanelModel(session_id=session_id, t_text=t_text, f_text=f_text))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        _log(f"[DB] 패널 저장 실패: {repr(e)}")
+
+
+def _db_update_session_time(session_id: str):
+    """ChatSession updated_at 갱신."""
+    from datetime import datetime
+    try:
+        db = SessionLocal()
+        try:
+            db.query(ChatSession).filter(ChatSession.session_id == session_id).update(
+                {"updated_at": datetime.utcnow()}
+            )
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        _log(f"[DB] 세션 시간 갱신 실패: {repr(e)}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,6 +122,17 @@ def on_startup():
     try:
         init_db()
         _log("[DB] MySQL 테이블 초기화 완료")
+        # 기존 테이블에 누락된 컬럼 추가 (마이그레이션)
+        from db.mysql_client import engine
+        with engine.connect() as conn:
+            try:
+                conn.execute(__import__('sqlalchemy').text(
+                    "ALTER TABLE chat_sessions ADD COLUMN profile_image VARCHAR(500) NULL"
+                ))
+                conn.commit()
+                _log("[DB] profile_image 컬럼 추가 완료")
+            except Exception:
+                pass  # 이미 존재하면 무시
     except Exception as e:
         _log(f"[DB] MySQL 연결 실패 (Redis만 사용): {repr(e)}")
 
@@ -85,6 +164,7 @@ class ChatRequest(BaseModel):
     message: str
     camera_emotion: dict = None
     voice_emotion: dict = None
+    rapid_followup: bool = False
 
 
 @app.post("/session")
@@ -120,7 +200,7 @@ def create_session(req: SetupRequest, db: Session = Depends(get_db)):
 {{"emotion": "현재 감정 상태 30자 이내", "direction": "행동 방향 30자 이내"}}
 """
     resp = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=LLM_MODEL,
         max_tokens=128,
         temperature=0.3,
         messages=[{"role": "user", "content": init_prompt}]
@@ -207,13 +287,32 @@ def resume_session(session_id: str, token: str = "", db: Session = Depends(get_d
     if not chat_session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
-    # Redis에서 메타 + 히스토리 로드
-    meta = get_meta(session_id)
-    if not meta:
-        raise HTTPException(status_code=404, detail="세션 데이터가 만료되었습니다.")
+    # 표시용 히스토리: MySQL raw rows (row 1개 = 버블 1개, 순서 보장)
+    db_messages = db.query(ChatMessage).filter(
+        ChatMessage.session_id == session_id
+    ).order_by(ChatMessage.id).all()
+    display_history = [{"role": m.role, "content": m.content} for m in db_messages]
 
-    history = get_history(session_id, last_n=20)
-    persona = meta["persona"]
+    # LLM 컨텍스트용: Redis 우선, 만료 시 MySQL rows를 turn 단위로 합쳐서 복원
+    meta = get_meta(session_id)
+    persona = json.loads(chat_session.persona_json) if chat_session.persona_json else {}
+
+    if meta:
+        persona = meta["persona"]
+        llm_history = get_history(session_id, last_n=20)
+    else:
+        # Redis 만료 시: 연속된 같은 role rows를 합쳐서 1 turn으로 복원
+        _log(f"[DB] Redis 만료 - MySQL에서 히스토리 복원: {session_id}")
+        llm_history = []
+        for m in db_messages:
+            if llm_history and llm_history[-1]["role"] == m.role:
+                llm_history[-1]["content"] += "\n" + m.content
+            else:
+                llm_history.append({"role": m.role, "content": m.content})
+        save_meta(session_id, persona, chat_session.scenario)
+        from db.redis_client import append_history as redis_append
+        for m in llm_history:
+            redis_append(session_id, m["role"], m["content"])
 
     # 메모리 세션 복원
     if session_id not in sessions:
@@ -221,9 +320,9 @@ def resume_session(session_id: str, token: str = "", db: Session = Depends(get_d
             "persona": persona,
             "scenario": chat_session.scenario,
             "chat_type": chat_session.chat_type,
-            "history": [{"role": m["role"], "content": m["content"]} for m in history],
+            "history": llm_history,
             "psychological_state": {"emotion": "대화 재개", "direction": "이전 대화 이어가기"},
-            "turn_count": len(history) // 2,
+            "turn_count": len(llm_history) // 2,
             "user_info": {
                 "name": "사용자",
                 "gender": persona.get("user_gender", "남성"),
@@ -232,10 +331,19 @@ def resume_session(session_id: str, token: str = "", db: Session = Depends(get_d
             },
         }
 
+    panel_pairs = get_panel_pairs(session_id)
+    if not panel_pairs:
+        # Redis 만료 시 MySQL에서 복원
+        db_panels = db.query(ChatPanelModel).filter(
+            ChatPanelModel.session_id == session_id
+        ).order_by(ChatPanelModel.id).all()
+        panel_pairs = [{"t": p.t_text, "f": p.f_text} for p in db_panels]
+
     return {
         "persona": persona,
-        "history": [{"role": m["role"], "content": m["content"]} for m in history],
+        "history": display_history,
         "profile_image": chat_session.profile_image or None,
+        "panels": panel_pairs,
     }
 
 
@@ -251,6 +359,18 @@ def chat(req: ChatRequest):
     if not session:
         _log(f"[404] 세션 없음 - {req.session_id} / 현재 세션: {list(sessions.keys())}")
         raise HTTPException(status_code=404, detail="세션이 존재하지 않습니다.")
+
+    # 감정 1메시지 전까지만 유지 (prev → 이전 메시지, last → 현재 메시지)
+    session["prev_camera_emotion"] = session.get("last_camera_emotion")
+    session["prev_voice_emotion"] = session.get("last_voice_emotion")
+    session["last_camera_emotion"] = req.camera_emotion if req.camera_emotion and req.camera_emotion.get("label") != "neutral" else None
+    session["last_voice_emotion"] = req.voice_emotion if req.voice_emotion else None
+
+    # 사용자 메시지 즉시 저장
+    # Redis: 합쳐서 1개 (LLM 컨텍스트용)
+    # MySQL: \n 기준으로 row 분리 (버블 1개 = row 1개)
+    append_history(req.session_id, "user", req.message)
+    _db_save_messages(req.session_id, "user", req.message, split_newline=True)
 
     llm_ctx = build_llm_context(req.session_id)
 
@@ -273,6 +393,7 @@ def chat(req: ChatRequest):
                 user_camera_emotion=req.camera_emotion,
                 user_voice_emotion=req.voice_emotion,
                 chat_type=chat_type,
+                rapid_followup=req.rapid_followup,
             ):
                 if event_type == "text":
                     full_response += value
@@ -280,37 +401,43 @@ def chat(req: ChatRequest):
         except Exception as e:
             _log(f"[에러] LLM 응답 실패: {repr(e)}")
             yield f"event: error\ndata: {json.dumps({'error': 'LLM 응답 실패'}, ensure_ascii=False)}\n\n"
-            yield f"event: done\ndata: {{}}\n\n"
+            yield "event: done\ndata: {}\n\n"
             return
 
-        yield f"event: stream_done\ndata: {{}}\n\n"
+        yield "event: stream_done\ndata: {}\n\n"
 
         _log(f"[{name}] {full_response}")
         session["turn_count"] += 1
 
         # ── 인트로 패널 (첫 번째 메시지일 때) ──
         if session["turn_count"] == 1:
-            yield f"event: panel_start\ndata: \n\n"
+            yield "event: panel_start\ndata: \n\n"
             try:
                 persona = session["persona"]
                 persona_context = f"""이름: {persona['name']}, 나이: {persona['age']}, 성별: {persona['gender']}
 성격: {persona['personality']}, 말투: {persona['speech_style']}
 시나리오: {session['scenario']}
 """
-                intro = run_intro_panel(client, persona_context)
+                intro = run_intro_panel(client, persona_context, first_message=req.message)
                 payload = json.dumps(
                     {"t": intro["t_panel"], "f": intro["f_panel"]},
                     ensure_ascii=False
                 )
                 yield f"event: panel\ndata: {payload}\n\n"
+                append_panel_pair(req.session_id, intro["t_panel"], intro["f_panel"])
+                _db_save_panel(req.session_id, intro["t_panel"], intro["f_panel"])
             except Exception as e:
                 _log(f"[에러] 인트로 패널 실패: {repr(e)}")
 
-        # Redis에 대화 저장
-        append_history(req.session_id, "user", req.message)
+        # Redis에 assistant 저장 (user는 요청 시점에 이미 저장됨)
+        # session["history"]는 lover.py 내부에서 이미 append됨 (user+assistant)
         append_history(req.session_id, "assistant", full_response)
-        session["history"].append({"role": "user", "content": req.message})
-        session["history"].append({"role": "assistant", "content": full_response})
+
+        # MySQL에 assistant 저장 + 세션 updated_at 갱신
+        # 온라인 모드: \n 기준으로 row 분리 (버블 1개 = row 1개)
+        is_online = chat_type == "online"
+        _db_save_messages(req.session_id, "assistant", full_response, split_newline=is_online)
+        _db_update_session_time(req.session_id)
 
         if should_summarize(req.session_id):
             run_summary_and_facts(client, req.session_id)
@@ -326,12 +453,16 @@ def chat(req: ChatRequest):
             save_state(req.session_id, session["psychological_state"])
         if trigger.get("trigger"):
             _log(f"[트리거] {trigger.get('reason')} → 패널 생성 중")
-            yield f"event: panel_start\ndata: \n\n"
+            yield "event: panel_start\ndata: \n\n"
             try:
+                cam_emotion = session.get("last_camera_emotion") or session.get("prev_camera_emotion")
+                voice_emotion = session.get("last_voice_emotion") or session.get("prev_voice_emotion")
                 panel = run_mc_panel(
                     client, req.session_id, trigger["context"],
                     persona_name=session["persona"]["name"],
                     user_name=session["user_info"].get("name", "사용자"),
+                    user_camera_emotion=cam_emotion,
+                    user_voice_emotion=voice_emotion,
                 )
                 _log(f"[MC→패널] {trigger['context'][:80]}...")
                 _log(f"[T형] {panel['t_panel']}")
@@ -341,11 +472,13 @@ def chat(req: ChatRequest):
                     ensure_ascii=False
                 )
                 yield f"event: panel\ndata: {payload}\n\n"
+                append_panel_pair(req.session_id, panel["t_panel"], panel["f_panel"])
+                _db_save_panel(req.session_id, panel["t_panel"], panel["f_panel"])
             except Exception as e:
                 _log(f"[에러] 패널 생성 실패: {repr(e)}")
                 yield f"event: error\ndata: {json.dumps({'error': '패널 생성 실패'}, ensure_ascii=False)}\n\n"
 
-        yield f"event: done\ndata: {{}}\n\n"
+        yield "event: done\ndata: {}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -408,15 +541,17 @@ async def upload_profile(
 def delete_session(session_id: str, token: str = "", db: Session = Depends(get_db)):
     sessions.pop(session_id, None)
     redis_delete_session(session_id)
-    # MySQL에서도 삭제
+    # MySQL에서도 삭제 (자식 테이블 먼저, 그다음 부모)
     if token:
         try:
             payload = verify_token(token)
+            db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete()
+            db.query(ChatPanelModel).filter(ChatPanelModel.session_id == session_id).delete()
             db.query(ChatSession).filter(
                 ChatSession.session_id == session_id,
                 ChatSession.user_id == payload["user_id"],
             ).delete()
             db.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            _log(f"[DB] 세션 삭제 실패: {repr(e)}")
     return {"ok": True}

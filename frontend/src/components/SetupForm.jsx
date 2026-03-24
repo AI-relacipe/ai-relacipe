@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API } from '../utils/api'
 
 // 사용자 초기 정보
 const userFields = [
@@ -90,6 +90,9 @@ export default function SetupForm({ onStart, theme }) {
       opacity: visible ? 1 : 0,
       transform: visible ? 'translateY(0)' : 'translateY(20px)',
     }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '16px 0', zIndex: 10 }}>
+        <img src="/relacipe_logo.svg" alt="Relacipe" style={{ height: 230, width: 'auto', transform: 'translateX(-60px)' }} />
+      </div>
       {step === 1 && (
         <div style={s.wrap}>
           <h2 style={s.title}>내 정보</h2>

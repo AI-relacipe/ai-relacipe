@@ -1,7 +1,8 @@
-import torch
+import os
 import subprocess
 import tempfile
-import os
+
+import torch
 from transformers import pipeline
 
 MODEL_NAME = "superb/wav2vec2-base-superb-er"

@@ -155,4 +155,17 @@ AI_relacipe_key.pem
 frontend/.env.DS_Store
 .idea/
 
-static/
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env variants
+*.local
+
+# Windsurf
+.windsurfrules
+
+# Frontend build
+frontend/dist/
+
+backend/static/

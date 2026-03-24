@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { getDominantColor } from '../utils/colorUtils'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API } from '../utils/api'
 
 export default function PanelSection({ panels, isActive, theme }) {
   const bottomRef = useRef(null)
