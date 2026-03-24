@@ -39,6 +39,9 @@ export default function ChatList({ token, username, onSelectSession, onNewChat, 
 
   return (
     <div style={s.wrap}>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'center', padding: '16px 0', zIndex: 10 }}>
+        <img src="/relacipe_logo.svg" alt="Relacipe" style={{ height: 230, width: 'auto', transform: 'translateX(-60px)' }} />
+      </div>
       <div style={s.card}>
         <div style={s.header}>
           <div>
@@ -133,7 +136,7 @@ const makeStyles = (t) => ({
 
   list: {
     display: 'flex', flexDirection: 'column', gap: 10,
-    overflowY: 'auto', flex: 1,
+    overflowY: 'auto', flex: 1, minHeight: 0,
   },
   emptyBox: {
     textAlign: 'center', padding: '40px 0',

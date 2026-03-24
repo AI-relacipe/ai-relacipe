@@ -278,8 +278,7 @@ export default function LandingPage({ onEnter }) {
       {/* 네비바 */}
       <nav style={s.nav}>
         <div style={s.logo}>
-          <span style={s.logoIcon}>📺</span>
-          <span style={s.logoText}>ai-relacipe</span>
+          <img src="/relacipe_logo.svg" alt="Relacipe" style={{ height: 108, width: 'auto' }} />
         </div>
         <button style={s.navBtn} onClick={onEnter}>회원가입</button>
       </nav>

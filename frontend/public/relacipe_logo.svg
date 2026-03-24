@@ -1,0 +1,36 @@
+<svg width="100%" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="heartG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff6eb4"/>
+      <stop offset="100%" stop-color="#c42b8a"/>
+    </linearGradient>
+    <radialGradient id="glowBg" cx="50%" cy="55%" r="50%">
+      <stop offset="0%" stop-color="#6b2060" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#12082a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="wordRela" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff82c2"/>
+      <stop offset="100%" stop-color="#e040a0"/>
+    </linearGradient>
+    <linearGradient id="wordCipe" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e040a0"/>
+      <stop offset="100%" stop-color="#aa2878"/>
+    </linearGradient>
+    <clipPath id="iconClip">
+      <rect x="40" y="30" width="220" height="220" rx="48"/>
+    </clipPath>
+  </defs>
+  <rect x="40" y="30" width="220" height="220" rx="48" fill="#12082a"/>
+  <circle cx="150" cy="150" r="90" fill="url(#glowBg)" clip-path="url(#iconClip)"/>
+  <path d="M 98,150 A 52,52 0 0,1 150,98" fill="none" stroke="#7744aa" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M 150,98 A 52,52 0 0,1 202,150" fill="none" stroke="#7744aa" stroke-width="3.5" stroke-linecap="round"/>
+  <rect x="110" y="82" width="80" height="24" rx="12" fill="#3d1f6e"/>
+  <circle cx="124" cy="94" r="5" fill="#ff4f7b"/>
+  <text x="155" y="99" text-anchor="middle" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="1.5" fill="#ffaadd">ON AIR</text>
+  <path d="M150,184 C150,184 116,164 116,143 C116,130 124,120 134,120 C140,120 146,124 150,129 C154,124 160,120 166,120 C176,120 184,130 184,143 C184,164 150,184 150,184 Z" fill="url(#heartG)"/>
+  <text x="292" y="164" font-family="'Helvetica Neue', Arial, sans-serif" font-size="78" font-weight="800" letter-spacing="-3" fill="url(#wordRela)">Rela</text>
+  <text x="467" y="164" font-family="'Helvetica Neue', Arial, sans-serif" font-size="78" font-weight="800" letter-spacing="-3" fill="url(#wordCipe)">cipe</text>
+  <circle cx="465" cy="126" r="5" fill="white" opacity="0.85"/>
+  <rect x="292" y="176" width="268" height="4" rx="2" fill="#7744aa" opacity="0.5"/>
+  <text x="292" y="206" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" letter-spacing="3" fill="#7a6a9a">AI ROMANCE TV SHOW SIMULATION</text>
+</svg>
