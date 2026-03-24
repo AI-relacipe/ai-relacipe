@@ -374,6 +374,17 @@ def chat(req: ChatRequest):
 
     llm_ctx = build_llm_context(req.session_id)
 
+    # 첫 메시지면 심리상태를 첫 메시지 분위기로 즉시 갱신
+    if session["turn_count"] == 0:
+        serious_keywords = ["헤어져", "헤어지자", "싫어", "화났어", "화나", "짜증", "실망", "그만하자",
+                            "지쳐", "못하겠어", "미워", "나쁜", "왜그래", "왜 그래", "울어", "울었어"]
+        warm_keywords = ["보고싶어", "보고 싶어", "사랑해", "좋아", "설레", "기대돼", "기다렸어"]
+        msg_lower = req.message.replace(" ", "")
+        if any(k in msg_lower for k in serious_keywords):
+            session["psychological_state"] = {"emotion": "갈등/긴장 상태 - 상대의 말에 당황하거나 방어적", "direction": "상황 파악 후 조심스럽게 대응"}
+        elif any(k in msg_lower for k in warm_keywords):
+            session["psychological_state"] = {"emotion": "설레고 반가운 상태", "direction": "따뜻하게 반응"}
+
     def generate():
         history = session["history"]
         state = session["psychological_state"]

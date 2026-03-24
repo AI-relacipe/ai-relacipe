@@ -1,10 +1,10 @@
 import os
 import tempfile
 
-from .emotion import analyze_emotion
+from emotion import analyze_emotion
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from .stt import transcribe
+from stt import transcribe
 
 app = FastAPI()
 
