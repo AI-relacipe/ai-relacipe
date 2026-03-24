@@ -34,7 +34,7 @@ export async function getDominantColor(imageUrl) {
           const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]
           if (top) {
             const [r, g, b] = top[0].split(',').map(Number)
-            resolve(`rgb(${255-r},${255-g},${255-b})`)
+            resolve(`rgb(${r},${g},${b})`)
           } else {
             resolve(null)
           }

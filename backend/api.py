@@ -493,9 +493,11 @@ async def upload_avatar(
     ext = os.path.splitext(file.filename)[-1].lower()
     if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
         raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다.")
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="파일 크기는 5MB 이하여야 합니다.")
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join("static", "profiles", filename)
-    contents = await file.read()
     with open(filepath, "wb") as f:
         f.write(contents)
     return {"image_url": f"/static/profiles/{filename}"}
@@ -517,9 +519,11 @@ async def upload_profile(
         raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다.")
 
     # 저장
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="파일 크기는 5MB 이하여야 합니다.")
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join("static", "profiles", filename)
-    contents = await file.read()
     with open(filepath, "wb") as f:
         f.write(contents)
 
@@ -539,9 +543,7 @@ async def upload_profile(
 
 @app.delete("/session/{session_id}")
 def delete_session(session_id: str, token: str = "", db: Session = Depends(get_db)):
-    sessions.pop(session_id, None)
-    redis_delete_session(session_id)
-    # MySQL에서도 삭제 (자식 테이블 먼저, 그다음 부모)
+    # MySQL에서 먼저 삭제 (자식 테이블 먼저, 그다음 부모)
     if token:
         try:
             payload = verify_token(token)
@@ -554,4 +556,7 @@ def delete_session(session_id: str, token: str = "", db: Session = Depends(get_d
             db.commit()
         except Exception as e:
             _log(f"[DB] 세션 삭제 실패: {repr(e)}")
+    # DB 삭제 성공 후 메모리/Redis에서 삭제
+    sessions.pop(session_id, None)
+    redis_delete_session(session_id)
     return {"ok": True}

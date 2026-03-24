@@ -56,13 +56,13 @@ export default function PanelSection({ panels, isActive, theme }) {
         localStorage.setItem('panel_t_image', data.image_url)
         getDominantColor(API + data.image_url).then(color => {
           if (color) { setTBgColor(color); localStorage.setItem('panel_t_bg', color) }
-        })
+        }).catch(() => {})
       } else {
         setFImage(data.image_url)
         localStorage.setItem('panel_f_image', data.image_url)
         getDominantColor(API + data.image_url).then(color => {
           if (color) { setFBgColor(color); localStorage.setItem('panel_f_bg', color) }
-        })
+        }).catch(() => {})
       }
     } catch {
       alert('업로드 중 오류가 발생했습니다.')
